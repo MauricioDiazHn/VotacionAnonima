@@ -2,7 +2,7 @@
 
 // Configuración de Supabase usando variables de entorno con fallback
 const SUPABASE_URL = 'https://onncrefefsvdmpxthxtw.supabase.co';
-const SUPABASE_KEY = process.env.SUPABASE_KEY;
+const SUPABASE_KEY = import.meta.env?.SUPABASE_KEY;
 
 // Inicializar cliente de Supabase
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
