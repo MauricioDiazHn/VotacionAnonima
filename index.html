@@ -1,0 +1,1356 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Evalúa-T</title>
+    
+    <!-- Tailwind CSS desde CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Supabase JS -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <style>
+        /* --- Configuración Base y Fuentes --- */
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* --- Estilos para simular la navegación entre páginas --- */
+        .page {
+            display: none; /* Oculta todas las páginas por defecto */
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        .page.active {
+            display: block; /* Muestra solo la página activa */
+        }
+
+        /* --- Animación de fondo tipo Aurora UI --- */
+        @keyframes aurora-gradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        .aurora-background {
+            background: linear-gradient(-45deg, #0f172a, #1e293b, #334155, #082f49);
+            background-size: 400% 400%;
+            animation: aurora-gradient 15s ease infinite;
+        }
+        
+        /* --- Animación de entrada --- */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* --- Estilos para las estrellas de calificación --- */
+        .star-rating svg {
+            cursor: pointer;
+            transition: transform 0.2s ease, color 0.2s ease;
+        }
+        .star-rating svg:hover {
+            transform: scale(1.2);
+        }
+        
+        /* --- Barra de scroll personalizada --- */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+    </style>
+</head>
+<body class="aurora-background text-white overflow-x-hidden">
+
+    <div id="app-container" class="min-h-screen w-full p-4 sm:p-6 lg:p-8">
+
+        <!-- =================================================================== -->
+        <!-- ======================= PÁGINA: DASHBOARD ========================= -->
+        <!-- =================================================================== -->
+        <div id="dashboard-page" class="page active">
+            <header class="flex justify-between items-center mb-8">
+                <h1 class="text-2xl sm:text-3xl font-bold text-white">Evalúa-T</h1>
+                <div class="flex items-center gap-4">
+                    <!-- Botón temporal de sincronización -->
+                    <button id="sync-ratings-btn" class="text-xs bg-yellow-600 hover:bg-yellow-700 transition-colors text-white px-2 py-1 rounded">
+                        Sync Ratings
+                    </button>
+                    <div class="user-section flex items-center gap-3">
+                    <!-- Se rellenará dinámicamente dependiendo del estado de autenticación -->
+                    <div id="auth-buttons" class="flex items-center gap-2">
+                        <a href="login.html" class="py-2 px-4 bg-indigo-600 hover:bg-indigo-700 transition-colors rounded-lg text-sm font-medium hidden" id="login-button">Iniciar sesión</a>
+                        <button class="text-white/70 hover:text-white transition-colors hidden" id="logout-button">Cerrar sesión</button>
+                    </div>
+                    <div class="user-avatar relative cursor-pointer group">
+                        <img id="user-avatar" src="https://placehold.co/40x40/e2e8f0/64748b?text=?" alt="Avatar de Usuario" class="rounded-full ring-2 ring-white/50">
+                        <div id="user-menu" class="absolute right-0 top-full mt-2 py-2 w-48 bg-white/10 backdrop-blur-lg rounded-lg shadow-lg ring-1 ring-white/20 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all">
+                            <!-- Se rellenará dinámicamente si el usuario está autenticado -->
+                        </div>
+                    </div>
+                </div>
+            </header>
+
+            <main>
+                <!-- Cuadrícula Bento (Bento Grid) -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+                    <!-- Bloque Principal: Búsqueda -->
+                    <div class="lg:col-span-3 p-6 sm:p-8 rounded-2xl bg-white/10 backdrop-blur-lg ring-1 ring-white/20 shadow-2xl">
+                        <h2 class="text-xl sm:text-2xl font-bold mb-4">Encuentra a tu catedrático</h2>
+                        <div class="relative">
+                            <input type="text" id="search-input" placeholder="Nombre del catedrático..." class="w-full bg-white/10 placeholder-white/60 text-white rounded-lg py-3 pl-12 pr-4 ring-1 ring-white/20 focus:ring-2 focus:ring-sky-400 focus:outline-none transition">
+                            <svg class="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-white/60" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                        </div>
+                        <!-- Contenedor para resultados de búsqueda -->
+                        <div id="search-results" class="mt-4 max-h-60 overflow-y-auto"></div>
+                    </div>
+
+                    <!-- Bloque: Catedráticos Mejor Evaluados -->
+                    <div class="lg:col-span-2 p-6 rounded-2xl bg-white/10 backdrop-blur-lg ring-1 ring-white/20 shadow-2xl">
+                        <h3 class="text-lg font-semibold mb-4">Mejor Evaluados</h3>
+                        <ul id="top-rated-list" class="space-y-4">
+                            <!-- Contenido generado por JS -->
+                        </ul>
+                    </div>
+
+                    <!-- Bloque: Mis Evaluaciones -->
+                    <div class="p-6 rounded-2xl bg-white/10 backdrop-blur-lg ring-1 ring-white/20 shadow-2xl flex flex-col justify-center items-center text-center">
+                        <h3 class="text-lg font-semibold mb-2">Mis Evaluaciones</h3>
+                        <p class="text-white/70 mb-4">Revisa las evaluaciones que has enviado.</p>
+                        <button id="view-my-submissions-btn" class="bg-sky-500 hover:bg-sky-600 transition-colors text-white font-bold py-2 px-4 rounded-lg">Ver mis envíos</button>
+                    </div>
+                    
+                    <!-- Bloque: Evaluar (Acción principal) -->
+                     <div class="lg:col-span-2 p-6 rounded-2xl bg-white/10 backdrop-blur-lg ring-1 ring-white/20 shadow-2xl">
+                        <h3 class="text-lg font-semibold mb-4">Evaluación Aleatoria</h3>
+                        <p class="text-white/70 mb-4">Descubre un catedrático aleatorio para evaluar o consultar. Tu feedback anónimo es valioso para la comunidad.</p>
+                        <button id="go-to-eval-btn-main" class="w-full bg-indigo-600 hover:bg-indigo-700 transition-colors text-white font-bold py-3 px-4 rounded-lg">
+                            Descubrir Catedrático
+                        </button>
+                    </div>
+                    
+                    <!-- Bloque: Agregar Catedrático -->
+                    <div class="p-6 rounded-2xl bg-white/10 backdrop-blur-lg ring-1 ring-white/20 shadow-2xl flex flex-col justify-center items-center text-center">
+                        <h3 class="text-lg font-semibold mb-2">Agregar Catedrático</h3>
+                        <p class="text-white/70 mb-4">¿Falta algún catedrático? Agrégalo para que otros puedan evaluarlo.</p>
+                        <button id="add-professor-btn" class="bg-emerald-600 hover:bg-emerald-700 transition-colors text-white font-bold py-2 px-4 rounded-lg">
+                            Agregar Catedrático
+                        </button>
+                    </div>
+                </div>
+            </main>
+        </div>
+        
+        <!-- =================================================================== -->
+        <!-- =================== PÁGINA: PERFIL DEL CATEDRÁTICO ================== -->
+        <!-- =================================================================== -->
+        <div id="profile-page" class="page">
+             <header class="flex items-center mb-8 gap-4">
+                <button id="back-to-dashboard-from-profile" class="p-2 rounded-full bg-white/10 hover:bg-white/20 transition">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+                </button>
+                <h1 class="text-2xl sm:text-3xl font-bold text-white">Perfil del Catedrático</h1>
+            </header>
+            <main id="profile-content" class="max-w-4xl mx-auto space-y-6">
+                <!-- Contenido generado por JS -->
+            </main>
+        </div>
+
+
+        <!-- =================================================================== -->
+        <!-- =================== PÁGINA: FORMULARIO DE EVALUACIÓN =============== -->
+        <!-- =================================================================== -->
+        <div id="evaluation-page" class="page">
+            <header class="flex items-center mb-8 gap-4">
+                <button id="back-from-eval-btn" class="p-2 rounded-full bg-white/10 hover:bg-white/20 transition">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+                </button>
+                <h1 class="text-2xl sm:text-3xl font-bold text-white">Evaluar Catedrático</h1>
+            </header>
+
+            <main class="max-w-2xl mx-auto">
+                <div id="eval-form-container" class="p-6 sm:p-8 rounded-2xl bg-white/10 backdrop-blur-lg ring-1 ring-white/20 shadow-2xl">
+                    <!-- Contenido del formulario generado por JS -->
+                </div>
+            </main>
+        </div>
+
+        <!-- =================================================================== -->
+        <!-- ====================== PÁGINA: VER MIS ENVÍOS ==================== -->
+        <!-- =================================================================== -->
+        <div id="my-submissions-page" class="page">
+            <header class="flex items-center mb-8 gap-4">
+                <button id="back-from-submissions-btn" class="p-2 rounded-full bg-white/10 hover:bg-white/20 transition">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+                </button>
+                <h1 class="text-2xl sm:text-3xl font-bold text-white">Mis Evaluaciones</h1>
+            </header>
+
+            <main class="max-w-6xl mx-auto space-y-8">
+                <!-- Sección: Mis Evaluaciones -->
+                <div class="p-6 rounded-2xl bg-white/10 backdrop-blur-lg ring-1 ring-white/20 shadow-2xl">
+                    <div class="flex items-center justify-between mb-6">
+                        <h2 class="text-xl font-bold">Mis Evaluaciones</h2>
+                        <span id="my-evaluations-count" class="text-sm text-white/60">0 evaluaciones</span>
+                    </div>
+                    <div id="my-evaluations-content" class="space-y-4">
+                        <!-- Contenido generado por JS -->
+                    </div>
+                </div>
+
+                <!-- Sección: Explorar Todos los Comentarios -->
+                <div class="p-6 rounded-2xl bg-white/10 backdrop-blur-lg ring-1 ring-white/20 shadow-2xl">
+                    <div class="flex items-center justify-between mb-6">
+                        <h2 class="text-xl font-bold">Explorar Todos los Comentarios</h2>
+                        <span id="all-comments-count" class="text-sm text-white/60">0 comentarios</span>
+                    </div>
+                    <div id="all-comments-content" class="space-y-6">
+                        <!-- Contenido generado por JS -->
+                    </div>
+                </div>
+            </main>
+        </div>
+
+    </div>
+
+    <!-- Modal para agregar catedrático -->
+    <div id="add-professor-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white/10 backdrop-blur-lg rounded-2xl ring-1 ring-white/20 shadow-2xl p-6 w-full max-w-md">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-bold text-white">Agregar Catedrático</h3>
+                <button id="close-modal-btn" class="text-white/60 hover:text-white transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            
+            <form id="add-professor-form" class="space-y-4">
+                <div>
+                    <label for="professor-name" class="block text-sm font-medium text-white mb-2">Nombre del Catedrático</label>
+                    <input type="text" id="professor-name" required class="w-full bg-white/10 placeholder-white/60 text-white rounded-lg py-3 px-4 ring-1 ring-white/20 focus:ring-2 focus:ring-emerald-400 focus:outline-none transition" placeholder="Ej: Dr. Juan Pérez">
+                </div>
+                
+                <div>
+                    <label for="professor-course" class="block text-sm font-medium text-white mb-2">Clase que imparte</label>
+                    <input type="text" id="professor-course" required class="w-full bg-white/10 placeholder-white/60 text-white rounded-lg py-3 px-4 ring-1 ring-white/20 focus:ring-2 focus:ring-emerald-400 focus:outline-none transition" placeholder="Ej: Cálculo I">
+                </div>
+                
+                <div id="add-professor-error" class="text-rose-400 text-sm hidden"></div>
+                
+                <div class="flex gap-3 pt-4">
+                    <button type="button" id="cancel-add-btn" class="flex-1 bg-white/10 hover:bg-white/20 transition-colors text-white font-medium py-3 px-4 rounded-lg">
+                        Cancelar
+                    </button>
+                    <button type="submit" id="submit-add-btn" class="flex-1 bg-emerald-600 hover:bg-emerald-700 transition-colors text-white font-bold py-3 px-4 rounded-lg">
+                        Agregar
+                    </button>
+                </div>
+            </form>
+            
+            <p class="text-xs text-white/50 mt-4 text-center">
+                La información será anónima y estará disponible para toda la comunidad estudiantil.
+            </p>
+        </div>
+    </div>
+
+    <script type="module">
+        import { 
+            isAuthenticated, 
+            getCurrentUser, 
+            signOut, 
+            getProfessors, 
+            getProfessorById, 
+            getTopRatedProfessors, 
+            searchProfessors, 
+            submitEvaluation,
+            hasUserEvaluatedProfessor,
+            getUserEvaluations,
+            getUserComments,
+            getAllCommentsWithProfessors,
+            addProfessor,
+            syncAllProfessorRatings,
+            getRandomUnevaluatedProfessor
+        } from './supabase.js';
+
+        // Variables globales
+        let professors = []; // Se llenará desde Supabase
+        let currentPage = 'dashboard-page';
+        let previousPage = 'dashboard-page';
+        let currentProfessorId = null;
+        let currentUser = null;
+
+        // --- AUTENTICACIÓN ---
+        async function checkAuthStatus() {
+            try {
+                // Verificar si el usuario está autenticado
+                const isUserAuth = await isAuthenticated();
+                currentUser = isUserAuth ? await getCurrentUser() : null;
+                
+                // Referencias a elementos del DOM
+                const loginButton = document.getElementById('login-button');
+                const logoutButton = document.getElementById('logout-button');
+                const userAvatar = document.getElementById('user-avatar');
+                const userMenu = document.getElementById('user-menu');
+                const evalButtons = document.querySelectorAll('.eval-button');
+                
+                if (isUserAuth && currentUser) {
+                    // Usuario autenticado
+                    loginButton.classList.add('hidden');
+                    logoutButton.classList.remove('hidden');
+                    
+                    // Personalizar avatar (primeras letras del email)
+                    const initials = currentUser.email.substring(0, 2).toUpperCase();
+                    userAvatar.src = `https://placehold.co/40x40/6366f1/e0e7ff?text=${initials}`;
+                    
+                    // Menu de usuario
+                    userMenu.innerHTML = `
+                        <p class="px-4 py-2 text-sm text-white/70">${currentUser.email}</p>
+                        <hr class="border-white/10">
+                        <a href="#" class="block px-4 py-2 text-sm text-white hover:bg-white/10">Ver mis evaluaciones</a>
+                    `;
+                    
+                    // Mostrar botones de evaluación
+                    evalButtons.forEach(btn => btn.classList.remove('hidden'));
+                } else {
+                    // Usuario no autenticado
+                    loginButton.classList.remove('hidden');
+                    logoutButton.classList.add('hidden');
+                    userAvatar.src = 'https://placehold.co/40x40/e2e8f0/64748b?text=?';
+                    userMenu.innerHTML = `
+                        <p class="px-4 py-2 text-sm text-white/70">No has iniciado sesión</p>
+                        <hr class="border-white/10">
+                        <a href="login.html" class="block px-4 py-2 text-sm text-white hover:bg-white/10">Iniciar sesión</a>
+                    `;
+                    
+                    // Ocultar botones de evaluación
+                    evalButtons.forEach(btn => btn.classList.add('hidden'));
+                }
+            } catch (error) {
+                console.error("Error al verificar el estado de autenticación:", error);
+            }
+        }
+
+        // Manejar cierre de sesión
+        document.getElementById('logout-button').addEventListener('click', async () => {
+            try {
+                await signOut();
+                await checkAuthStatus();
+                // Mostrar mensaje de cierre de sesión
+                showToast("Has cerrado sesión correctamente", "success");
+            } catch (error) {
+                console.error("Error al cerrar sesión:", error);
+                showToast("Error al cerrar sesión", "error");
+            }
+        });
+        
+        // Manejar sincronización de ratings (botón temporal)
+        document.getElementById('sync-ratings-btn').addEventListener('click', async () => {
+            try {
+                showToast("Sincronizando ratings...", "info");
+                await syncAllProfessorRatings();
+                
+                // Recargar datos
+                professors = await getProfessors();
+                await renderTopRatedProfessors();
+                
+                showToast("Ratings sincronizados correctamente", "success");
+            } catch (error) {
+                console.error("Error al sincronizar ratings:", error);
+                showToast("Error al sincronizar ratings", "error");
+            }
+        });
+
+        // --- NAVEGACIÓN ---
+        const pages = document.querySelectorAll('.page');
+        function showPage(pageId) {
+            previousPage = currentPage;
+            currentPage = pageId;
+            pages.forEach(page => page.classList.remove('active'));
+            document.getElementById(pageId).classList.add('active');
+            window.scrollTo(0, 0);
+        }
+
+        // Función para inicializar los event listeners de navegación
+        function initializeNavigation() {
+            console.log('Inicializando navegación...');
+            
+            // Botón de regreso desde el perfil del profesor
+            const backFromProfileBtn = document.getElementById('back-to-dashboard-from-profile');
+            console.log('Botón back-to-dashboard-from-profile encontrado:', !!backFromProfileBtn);
+            if (backFromProfileBtn) {
+                backFromProfileBtn.addEventListener('click', () => {
+                    console.log('Regresando al dashboard desde perfil');
+                    showPage('dashboard-page');
+                });
+            }
+            
+            // Botón de regreso desde el formulario de evaluación
+            const backFromEvalBtn = document.getElementById('back-from-eval-btn');
+            console.log('Botón back-from-eval-btn encontrado:', !!backFromEvalBtn);
+            if (backFromEvalBtn) {
+                backFromEvalBtn.addEventListener('click', () => {
+                    console.log('Regresando desde evaluación a:', previousPage);
+                    showPage(previousPage);
+                });
+            }
+            
+            // Verificar autenticación antes de ir al formulario de evaluación
+            const goToEvalBtnMain = document.getElementById('go-to-eval-btn-main');
+            console.log('Botón go-to-eval-btn-main encontrado:', !!goToEvalBtnMain);
+            if (goToEvalBtnMain) {
+                goToEvalBtnMain.addEventListener('click', async () => {
+                    try {
+                        // Verificar si está autenticado primero
+                        const isAuth = await isAuthenticated();
+                        
+                        if (!isAuth) {
+                            showToast("Inicia sesión para descubrir y evaluar catedráticos", "warning");
+                            setTimeout(() => {
+                                window.location.href = 'login.html';
+                            }, 1500);
+                            return;
+                        }
+                        
+                        // Obtener un profesor aleatorio no evaluado
+                        const result = await getRandomUnevaluatedProfessor();
+                        
+                        if (!result) {
+                            showToast("No hay catedráticos disponibles", "warning");
+                            return;
+                        }
+                        
+                        // Si es un objeto con professor, extraer el profesor
+                        const professor = result.professor || result;
+                        const canEvaluate = result.canEvaluate !== undefined ? result.canEvaluate : true;
+                        const message = result.message;
+                        
+                        if (message) {
+                            showToast(message, canEvaluate ? "info" : "warning");
+                        }
+                        
+                        // Ir al perfil del profesor (desde ahí puede evaluar o ver comentarios)
+                        setTimeout(() => {
+                            window.viewProfessor(professor.id, true); // true indica que viene de selección aleatoria
+                        }, 1000);
+                        
+                    } catch (error) {
+                        console.error("Error al obtener profesor aleatorio:", error);
+                        showToast("Error al buscar catedráticos", "error");
+                    }
+                });
+            }
+            
+            // Botón "Ver mis envíos"
+            const viewMySubmissionsBtn = document.getElementById('view-my-submissions-btn');
+            console.log('Botón view-my-submissions-btn encontrado:', !!viewMySubmissionsBtn);
+            if (viewMySubmissionsBtn) {
+                viewMySubmissionsBtn.addEventListener('click', async () => {
+                    try {
+                        // Verificar si está autenticado
+                        const isAuth = await isAuthenticated();
+                        
+                        if (!isAuth) {
+                            showToast("Inicia sesión para ver tus evaluaciones", "warning");
+                            setTimeout(() => {
+                                window.location.href = 'login.html';
+                            }, 1500);
+                            return;
+                        }
+                        
+                        await window.showMySubmissions();
+                        
+                    } catch (error) {
+                        console.error("Error al cargar mis envíos:", error);
+                        showToast("Error al cargar tus evaluaciones", "error");
+                    }
+                });
+            }
+            
+            // Botón de regreso desde "Mis envíos"
+            const backFromSubmissionsBtn = document.getElementById('back-from-submissions-btn');
+            console.log('Botón back-from-submissions-btn encontrado:', !!backFromSubmissionsBtn);
+            if (backFromSubmissionsBtn) {
+                backFromSubmissionsBtn.addEventListener('click', () => {
+                    console.log('Regresando al dashboard desde mis envíos');
+                    showPage('dashboard-page');
+                });
+            }
+        }
+        
+        // --- MODAL PARA AGREGAR CATEDRÁTICO ---
+        const addProfessorBtn = document.getElementById('add-professor-btn');
+        const addProfessorModal = document.getElementById('add-professor-modal');
+        const closeModalBtn = document.getElementById('close-modal-btn');
+        const cancelAddBtn = document.getElementById('cancel-add-btn');
+        const addProfessorForm = document.getElementById('add-professor-form');
+        const addProfessorError = document.getElementById('add-professor-error');
+        
+        // Abrir modal
+        addProfessorBtn.addEventListener('click', async () => {
+            // Verificar si está autenticado
+            const isAuth = await isAuthenticated();
+            
+            if (!isAuth) {
+                showToast("Inicia sesión para agregar catedráticos", "warning");
+                setTimeout(() => {
+                    window.location.href = 'login.html';
+                }, 1500);
+                return;
+            }
+            
+            addProfessorModal.classList.remove('hidden');
+            document.getElementById('professor-name').focus();
+        });
+        
+        // Cerrar modal
+        function closeModal() {
+            addProfessorModal.classList.add('hidden');
+            addProfessorForm.reset();
+            addProfessorError.classList.add('hidden');
+        }
+        
+        closeModalBtn.addEventListener('click', closeModal);
+        cancelAddBtn.addEventListener('click', closeModal);
+        
+        // Cerrar modal al hacer clic fuera
+        addProfessorModal.addEventListener('click', (e) => {
+            if (e.target === addProfessorModal) {
+                closeModal();
+            }
+        });
+        
+        // Cerrar modal con Escape
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !addProfessorModal.classList.contains('hidden')) {
+                closeModal();
+            }
+        });
+        
+        // Manejar envío del formulario
+        addProfessorForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const name = document.getElementById('professor-name').value.trim();
+            const course = document.getElementById('professor-course').value.trim();
+            const submitBtn = document.getElementById('submit-add-btn');
+            
+            // Validación
+            if (!name || !course) {
+                addProfessorError.textContent = 'Por favor completa todos los campos';
+                addProfessorError.classList.remove('hidden');
+                return;
+            }
+            
+            if (name.length < 3) {
+                addProfessorError.textContent = 'El nombre debe tener al menos 3 caracteres';
+                addProfessorError.classList.remove('hidden');
+                return;
+            }
+            
+            if (course.length < 3) {
+                addProfessorError.textContent = 'El nombre de la clase debe tener al menos 3 caracteres';
+                addProfessorError.classList.remove('hidden');
+                return;
+            }
+            
+            try {
+                // Mostrar estado de carga
+                submitBtn.innerHTML = `
+                    <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Agregando...
+                `;
+                submitBtn.disabled = true;
+                
+                // Agregar catedrático
+                const newProfessor = await addProfessor(name, course);
+                
+                // Mostrar éxito
+                showToast(`${name} ha sido agregado exitosamente`, 'success');
+                
+                // Recargar lista de profesores
+                professors = await getProfessors();
+                await renderTopRatedProfessors();
+                
+                // Cerrar modal
+                closeModal();
+                
+            } catch (error) {
+                console.error('Error al agregar catedrático:', error);
+                
+                if (error.message?.includes('duplicate') || error.message?.includes('unique')) {
+                    addProfessorError.textContent = 'Este catedrático ya existe en la base de datos';
+                } else {
+                    addProfessorError.textContent = 'Error al agregar el catedrático. Intenta nuevamente.';
+                }
+                
+                addProfessorError.classList.remove('hidden');
+            } finally {
+                // Restaurar botón
+                submitBtn.innerHTML = 'Agregar';
+                submitBtn.disabled = false;
+            }
+        });
+
+        // --- FUNCIONES DE UTILIDAD ---
+        
+        // Mostrar mensajes Toast
+        function showToast(message, type = "info") {
+            // Crear el toast si no existe
+            if (!document.getElementById('toast')) {
+                const toast = document.createElement('div');
+                toast.id = 'toast';
+                toast.className = 'fixed bottom-4 right-4 px-4 py-2 rounded-lg shadow-lg backdrop-blur-lg transition-all duration-300 transform translate-y-full opacity-0 z-50';
+                document.body.appendChild(toast);
+            }
+            
+            const toast = document.getElementById('toast');
+            
+            // Establecer tipo de toast
+            toast.className = 'fixed bottom-4 right-4 px-4 py-2 rounded-lg shadow-lg backdrop-blur-lg transition-all duration-300 transform translate-y-0 opacity-100 z-50';
+            
+            switch (type) {
+                case 'success':
+                    toast.className += ' bg-green-500/80 text-white';
+                    break;
+                case 'error':
+                    toast.className += ' bg-rose-500/80 text-white';
+                    break;
+                case 'warning':
+                    toast.className += ' bg-amber-500/80 text-white';
+                    break;
+                default:
+                    toast.className += ' bg-sky-500/80 text-white';
+            }
+            
+            // Establecer mensaje
+            toast.textContent = message;
+            
+            // Mostrar toast
+            setTimeout(() => {
+                toast.className = toast.className.replace('translate-y-0 opacity-100', 'translate-y-full opacity-0');
+                setTimeout(() => {
+                    toast.remove();
+                }, 300);
+            }, 3000);
+        }
+
+        // Formatear fecha
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toISOString().split('T')[0];
+        }
+        
+        // --- CARGA DE DATOS INICIALES ---
+        async function loadInitialData() {
+            try {
+                // Obtener profesores
+                professors = await getProfessors();
+                
+                // Verificar estado de autenticación
+                await checkAuthStatus();
+                
+                // Renderizar lista de mejores evaluados
+                await renderTopRatedProfessors();
+                
+                // Inicializar navegación después de cargar datos
+                initializeNavigation();
+                
+            } catch (error) {
+                console.error("Error al cargar datos iniciales:", error);
+                showToast("Error al cargar datos. Por favor recarga la página.", "error");
+                
+                // Aun si hay error, inicializar navegación
+                initializeNavigation();
+            }
+        }
+        
+        // --- LÓGICA DE RENDERIZADO ---
+        
+        // Renderizar Catedráticos Mejor Evaluados
+        async function renderTopRatedProfessors() {
+            try {
+                const topRatedList = document.getElementById('top-rated-list');
+                const topRated = await getTopRatedProfessors(2);
+                
+                console.log('Renderizando top rated professors:', topRated);
+                
+                if (topRated && topRated.length > 0) {
+                    topRatedList.innerHTML = topRated.map(prof => `
+                        <li class="flex items-center justify-between p-2 -m-2 rounded-lg hover:bg-white/10 transition cursor-pointer" onclick="window.viewProfessor(${prof.id})">
+                            <div class="flex items-center gap-4">
+                                <img src="${prof.avatar.replace('64x64', '48x48')}" alt="Avatar" class="rounded-full">
+                                <div>
+                                    <p class="font-semibold">${prof.name}</p>
+                                    <p class="text-sm text-white/70">${prof.courses.join(', ')}</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-1 text-yellow-400">
+                                <span>${prof.rating}</span>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"></path></svg>
+                            </div>
+                        </li>
+                    `).join('');
+                } else {
+                    topRatedList.innerHTML = '<li class="text-white/60">No hay catedráticos evaluados aún.</li>';
+                }
+            } catch (error) {
+                console.error("Error al renderizar profesores mejor evaluados:", error);
+                document.getElementById('top-rated-list').innerHTML = '<li class="text-white/60">Error al cargar la lista de catedráticos.</li>';
+            }
+        }
+
+        // Lógica de Búsqueda
+        const searchInput = document.getElementById('search-input');
+        const searchResultsContainer = document.getElementById('search-results');
+        
+        searchInput.addEventListener('input', async (e) => {
+            const query = e.target.value.toLowerCase();
+            if (query.length < 2) {
+                searchResultsContainer.innerHTML = '';
+                return;
+            }
+            
+            try {
+                searchResultsContainer.innerHTML = '<p class="text-center text-white/60 py-4">Buscando...</p>';
+                const results = await searchProfessors(query);
+                
+                if (results && results.length > 0) {
+                    searchResultsContainer.innerHTML = results.map(prof => `
+                        <div class="flex items-center justify-between p-3 rounded-lg hover:bg-white/10 transition cursor-pointer" onclick="window.viewProfessor(${prof.id})">
+                            <div class="flex items-center gap-4">
+                                <img src="${prof.avatar.replace('64x64', '48x48')}" alt="Avatar" class="rounded-full">
+                                <div>
+                                    <p class="font-semibold">${prof.name}</p>
+                                    <p class="text-sm text-white/70">${prof.courses.join(', ')}</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-1 text-yellow-400">
+                                <span>${prof.rating}</span>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"></path></svg>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    searchResultsContainer.innerHTML = '<p class="text-center text-white/60 py-4">No se encontraron resultados</p>';
+                }
+            } catch (error) {
+                console.error("Error al buscar catedráticos:", error);
+                searchResultsContainer.innerHTML = '<p class="text-center text-rose-400 py-4">Error al buscar catedráticos</p>';
+            }
+        });
+
+        // Función para mostrar la página "Ver mis envíos"
+        window.showMySubmissions = async () => {
+            try {
+                showPage('my-submissions-page');
+                
+                // Mostrar estados de carga
+                document.getElementById('my-evaluations-content').innerHTML = `
+                    <div class="flex justify-center items-center py-10">
+                        <div class="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-white"></div>
+                    </div>
+                `;
+                
+                document.getElementById('all-comments-content').innerHTML = `
+                    <div class="flex justify-center items-center py-10">
+                        <div class="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-white"></div>
+                    </div>
+                `;
+                
+                // Cargar mis evaluaciones
+                const myEvaluations = await getUserEvaluations();
+                const myComments = await getUserComments();
+                
+                // Crear un mapa de comentarios por profesor_id
+                const commentsMap = {};
+                myComments.forEach(comment => {
+                    commentsMap[comment.professor_id] = comment;
+                });
+                
+                // Renderizar mis evaluaciones
+                const myEvaluationsContent = document.getElementById('my-evaluations-content');
+                const evaluationsCount = document.getElementById('my-evaluations-count');
+                
+                evaluationsCount.textContent = `${myEvaluations.length} evaluaciones`;
+                
+                if (myEvaluations.length > 0) {
+                    myEvaluationsContent.innerHTML = myEvaluations.map(evaluation => {
+                        const prof = evaluation.professors;
+                        const userComment = commentsMap[prof.id];
+                        const ratingStars = (rating) => Array(5).fill(0).map((_, i) => `
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" class="${i < Math.round(rating) ? 'text-yellow-400' : 'text-gray-600'}"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"></path></svg>
+                        `).join('');
+                        
+                        return `
+                            <div class="p-4 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition cursor-pointer" onclick="window.viewProfessor(${prof.id})">
+                                <div class="flex items-center justify-between mb-3">
+                                    <div class="flex items-center gap-4">
+                                        <img src="${prof.avatar.replace('64x64', '48x48')}" alt="Avatar" class="rounded-full">
+                                        <div>
+                                            <h3 class="font-semibold">${prof.name}</h3>
+                                            <p class="text-sm text-white/70">${prof.courses.join(', ')}</p>
+                                        </div>
+                                    </div>
+                                    <div class="text-right">
+                                        <div class="flex items-center gap-1 mb-1">
+                                            <span class="text-lg font-bold text-yellow-400">${evaluation.average}</span>
+                                            <div class="flex">${ratingStars(evaluation.average)}</div>
+                                        </div>
+                                        <p class="text-xs text-white/50">Tu calificación</p>
+                                    </div>
+                                </div>
+                                <div class="grid grid-cols-3 gap-4 text-sm mb-3">
+                                    <div class="text-center">
+                                        <p class="text-white/60">Dominio</p>
+                                        <div class="flex justify-center">${ratingStars(evaluation.dominio)}</div>
+                                    </div>
+                                    <div class="text-center">
+                                        <p class="text-white/60">Metodología</p>
+                                        <div class="flex justify-center">${ratingStars(evaluation.metodologia)}</div>
+                                    </div>
+                                    <div class="text-center">
+                                        <p class="text-white/60">Puntualidad</p>
+                                        <div class="flex justify-center">${ratingStars(evaluation.puntualidad)}</div>
+                                    </div>
+                                </div>
+                                ${userComment ? `
+                                    <div class="pt-3 border-t border-white/10">
+                                        <p class="text-sm text-white/80 italic">"${userComment.text}"</p>
+                                        <p class="text-xs text-white/50 text-right mt-1">${formatDate(userComment.date)}</p>
+                                    </div>
+                                ` : ''}
+                            </div>
+                        `;
+                    }).join('');
+                } else {
+                    myEvaluationsContent.innerHTML = `
+                        <div class="text-center py-10 text-white/60">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="mx-auto mb-4 text-white/30"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14,2 14,8 20,8"></polyline></svg>
+                            <p class="mb-2">Aún no has realizado evaluaciones</p>
+                            <button onclick="window.goToRandomProfessor()" class="bg-indigo-600 hover:bg-indigo-700 transition-colors text-white px-4 py-2 rounded-lg text-sm">
+                                Evaluar un catedrático
+                            </button>
+                        </div>
+                    `;
+                }
+                
+                // Cargar todos los comentarios
+                const allCommentsData = await getAllCommentsWithProfessors();
+                const allCommentsContent = document.getElementById('all-comments-content');
+                const allCommentsCount = document.getElementById('all-comments-count');
+                
+                const totalComments = allCommentsData.reduce((sum, profData) => sum + profData.comments.length, 0);
+                allCommentsCount.textContent = `${totalComments} comentarios`;
+                
+                if (allCommentsData.length > 0) {
+                    allCommentsContent.innerHTML = allCommentsData.map(profData => {
+                        const prof = profData.professor;
+                        const comments = profData.comments;
+                        
+                        // Calcular el rating promedio basado en las evaluaciones reales (igual que en "Mis Evaluaciones")
+                        const actualRating = prof.ratings?.length > 0 ? 
+                            prof.ratings.reduce((acc, r) => acc + parseFloat(r.average), 0) / prof.ratings.length : 
+                            0;
+                        
+                        const ratingStars = (rating) => Array(5).fill(0).map((_, i) => `
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" class="${i < Math.round(rating) ? 'text-yellow-400' : 'text-gray-600'}"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"></path></svg>
+                        `).join('');
+                        
+                        return `
+                            <div class="p-4 sm:p-6 rounded-lg bg-white/5 border border-white/10">
+                                <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-4 cursor-pointer hover:bg-white/5 -m-2 p-2 rounded gap-3" onclick="window.viewProfessor(${prof.id})">
+                                    <div class="flex items-center gap-4">
+                                        <img src="${prof.avatar.replace('64x64', '48x48')}" alt="Avatar" class="rounded-full">
+                                        <div>
+                                            <h3 class="font-semibold">${prof.name}</h3>
+                                            <p class="text-sm text-white/70">${prof.courses.join(', ')}</p>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center gap-2 sm:flex-col sm:items-end">
+                                        <div class="flex items-center gap-1">
+                                            <span class="text-lg font-bold text-yellow-400">${actualRating.toFixed(1)}</span>
+                                            <div class="flex">${ratingStars(actualRating)}</div>
+                                        </div>
+                                        <span class="text-sm text-white/60">(${comments.length} comentarios)</span>
+                                    </div>
+                                </div>
+                                <div class="space-y-3 max-h-60 overflow-y-auto">
+                                    ${comments.map(comment => `
+                                        <div class="p-3 rounded bg-white/5 border-l-2 border-sky-400/50">
+                                            <p class="text-sm text-white/90">"${comment.text}"</p>
+                                            <p class="text-xs text-white/50 text-right mt-1">${formatDate(comment.date)}</p>
+                                        </div>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                } else {
+                    allCommentsContent.innerHTML = `
+                        <div class="text-center py-10 text-white/60">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="mx-auto mb-4 text-white/30"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+                            <p>Aún no hay comentarios en la plataforma</p>
+                        </div>
+                    `;
+                }
+                
+            } catch (error) {
+                console.error("Error al cargar mis envíos:", error);
+                showToast("Error al cargar las evaluaciones", "error");
+            }
+        };
+
+        // Función para ir a un profesor aleatorio (reutilizable)
+        window.goToRandomProfessor = async () => {
+            try {
+                const result = await getRandomUnevaluatedProfessor();
+                
+                if (!result) {
+                    showToast("No hay catedráticos disponibles", "warning");
+                    return;
+                }
+                
+                const professor = result.professor || result;
+                const message = result.message;
+                
+                if (message) {
+                    showToast(message, "info");
+                }
+                
+                setTimeout(() => {
+                    window.viewProfessor(professor.id, true);
+                }, 1000);
+                
+            } catch (error) {
+                console.error("Error al obtener profesor aleatorio:", error);
+                showToast("Error al buscar catedráticos", "error");
+            }
+        };
+
+        // Ver Perfil del Catedrático
+        window.viewProfessor = async (id, fromRandomSelection = false) => {
+            try {
+                currentProfessorId = id;
+                const profileContent = document.getElementById('profile-content');
+                
+                // Mostrar estado de carga
+                profileContent.innerHTML = `
+                    <div class="flex justify-center items-center p-20">
+                        <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
+                    </div>
+                `;
+                showPage('profile-page');
+                
+                // Re-inicializar el botón de regreso para asegurar que funcione
+                const backBtn = document.getElementById('back-to-dashboard-from-profile');
+                if (backBtn) {
+                    // Remover event listener anterior si existe
+                    backBtn.replaceWith(backBtn.cloneNode(true));
+                    // Obtener la nueva referencia y agregar el event listener
+                    const newBackBtn = document.getElementById('back-to-dashboard-from-profile');
+                    newBackBtn.addEventListener('click', () => {
+                        console.log('Regresando al dashboard desde perfil');
+                        showPage('dashboard-page');
+                    });
+                }
+                
+                // Obtener datos del catedrático
+                const prof = await getProfessorById(id);
+                if (!prof) {
+                    profileContent.innerHTML = `<div class="text-center text-white/60 py-10">Catedrático no encontrado</div>`;
+                    return;
+                }
+                
+                // Verificar si el usuario puede evaluar
+                let canEvaluate = await isAuthenticated();
+                let hasEvaluated = false;
+                
+                if (canEvaluate) {
+                    hasEvaluated = await hasUserEvaluatedProfessor(id);
+                }
+                
+                const ratingStars = (rating) => Array(5).fill(0).map((_, i) => `
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" class="${i < Math.round(rating) ? 'text-yellow-400' : 'text-gray-600'}"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"></path></svg>
+                `).join('');
+
+                // Botón de evaluación según estado de autenticación
+                let evaluateButton = '';
+                
+                if (!canEvaluate) {
+                    evaluateButton = `
+                        <a href="login.html" class="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 transition-colors text-white font-bold py-3 px-6 rounded-lg">
+                            Iniciar sesión para evaluar
+                        </a>
+                    `;
+                } else if (hasEvaluated) {
+                    evaluateButton = `
+                        <button disabled class="w-full sm:w-auto bg-gray-500 text-white font-bold py-3 px-6 rounded-lg cursor-not-allowed">
+                            Ya has evaluado
+                        </button>
+                    `;
+                } else {
+                    evaluateButton = `
+                        <button class="w-full sm:w-auto bg-indigo-600 hover:bg-indigo-700 transition-colors text-white font-bold py-3 px-6 rounded-lg eval-button" onclick="window.goToEvalForm(${prof.id})">
+                            Evaluar
+                        </button>
+                    `;
+                }
+                
+                // Calcular promedios de ratings
+                const avgDominio = prof.ratings?.length > 0 ? prof.ratings.reduce((acc, r) => acc + r.dominio, 0) / prof.ratings.length : 0;
+                const avgMetodologia = prof.ratings?.length > 0 ? prof.ratings.reduce((acc, r) => acc + r.metodologia, 0) / prof.ratings.length : 0;
+                const avgPuntualidad = prof.ratings?.length > 0 ? prof.ratings.reduce((acc, r) => acc + r.puntualidad, 0) / prof.ratings.length : 0;
+                
+                // Calcular el rating general promedio basado en las evaluaciones reales
+                const overallRating = prof.ratings?.length > 0 ? 
+                    prof.ratings.reduce((acc, r) => acc + parseFloat(r.average), 0) / prof.ratings.length : 
+                    0;
+                    
+                console.log('Datos del profesor:', {
+                    name: prof.name,
+                    ratingFromDB: prof.rating,
+                    ratingsArray: prof.ratings,
+                    calculatedRating: overallRating,
+                    ratingsCount: prof.ratings?.length || 0
+                });
+                
+                // Banner especial si viene de selección aleatoria
+                let randomBanner = '';
+                if (fromRandomSelection) {
+                    if (hasEvaluated) {
+                        randomBanner = `
+                            <div class="mb-6 p-4 rounded-lg bg-amber-500/20 border border-amber-500/30">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center gap-3">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-amber-400"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
+                                        <div>
+                                            <p class="font-semibold text-amber-200">¡Ya evaluaste a este catedrático!</p>
+                                            <p class="text-sm text-amber-300">Aquí puedes ver tu evaluación y la de otros estudiantes.</p>
+                                        </div>
+                                    </div>
+                                    <button onclick="window.goToRandomProfessor()" class="bg-amber-600 hover:bg-amber-700 transition-colors text-white text-sm px-3 py-2 rounded-lg">
+                                        Otro aleatorio
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    } else {
+                        randomBanner = `
+                            <div class="mb-6 p-4 rounded-lg bg-emerald-500/20 border border-emerald-500/30">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center gap-3">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-400"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                        <div>
+                                            <p class="font-semibold text-emerald-200">¡Catedrático seleccionado aleatoriamente!</p>
+                                            <p class="text-sm text-emerald-300">Ayuda a la comunidad evaluando a ${prof.name}.</p>
+                                        </div>
+                                    </div>
+                                    <button onclick="window.goToRandomProfessor()" class="bg-emerald-600 hover:bg-emerald-700 transition-colors text-white text-sm px-3 py-2 rounded-lg">
+                                        Otro aleatorio
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    }
+                }
+
+                profileContent.innerHTML = `
+                    ${randomBanner}
+                    <!-- Card de Info Principal -->
+                    <div class="p-6 sm:p-8 rounded-2xl bg-white/10 backdrop-blur-lg ring-1 ring-white/20 shadow-2xl flex flex-col sm:flex-row items-center gap-6">
+                        <img src="${prof.avatar}" alt="Avatar" class="rounded-full w-24 h-24 ring-4 ring-white/30">
+                        <div class="flex-1 text-center sm:text-left">
+                            <h2 class="text-2xl font-bold">${prof.name}</h2>
+                            <p class="text-white/70">${prof.courses.join(', ')}</p>
+                            <div class="flex items-center gap-2 mt-2 justify-center sm:justify-start">
+                                <span class="text-2xl font-bold text-yellow-400">${overallRating.toFixed(1)}</span>
+                                <div class="flex">${ratingStars(overallRating)}</div>
+                                <span class="text-sm text-white/60">(${prof.ratings?.length || 0} evaluaciones)</span>
+                            </div>
+                        </div>
+                        ${evaluateButton}
+                    </div>
+
+                    <!-- Card de Calificaciones y Comentarios -->
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div class="md:col-span-1 p-6 rounded-2xl bg-white/10 backdrop-blur-lg ring-1 ring-white/20 shadow-2xl">
+                            <h3 class="text-lg font-semibold mb-4">Desglose</h3>
+                            <ul class="space-y-3">
+                                <li class="flex justify-between items-center"><span class="text-white/80">Dominio del Tema</span> <div class="flex">${ratingStars(avgDominio)}</div></li>
+                                <li class="flex justify-between items-center"><span class="text-white/80">Metodología</span> <div class="flex">${ratingStars(avgMetodologia)}</div></li>
+                                <li class="flex justify-between items-center"><span class="text-white/80">Puntualidad</span> <div class="flex">${ratingStars(avgPuntualidad)}</div></li>
+                            </ul>
+                        </div>
+                        <div class="md:col-span-2 p-6 rounded-2xl bg-white/10 backdrop-blur-lg ring-1 ring-white/20 shadow-2xl">
+                            <h3 class="text-lg font-semibold mb-4">Comentarios Anónimos</h3>
+                            <ul class="space-y-4 max-h-96 overflow-y-auto pr-2">
+                                ${prof.comments && prof.comments.length > 0 ? 
+                                    prof.comments.map(c => `
+                                        <li class="border-b border-white/10 pb-3">
+                                            <p>"${c.text}"</p>
+                                            <p class="text-xs text-right text-white/50 mt-2">${formatDate(c.date)}</p>
+                                        </li>
+                                    `).join('') : 
+                                    '<li class="text-white/60">Aún no hay comentarios para este catedrático.</li>'
+                                }
+                            </ul>
+                        </div>
+                    </div>
+                `;
+                
+                // Limpiar búsqueda
+                searchInput.value = '';
+                searchResultsContainer.innerHTML = '';
+            } catch (error) {
+                console.error("Error al cargar el perfil del catedrático:", error);
+                const profileContent = document.getElementById('profile-content');
+                profileContent.innerHTML = `
+                    <div class="text-center text-rose-400 py-10">
+                        Error al cargar el perfil del catedrático. Por favor intenta más tarde.
+                    </div>
+                `;
+            }
+        };        // Ir al Formulario de Evaluación
+        window.goToEvalForm = async (id) => {
+            try {
+                // Verificar autenticación
+                if (!await isAuthenticated()) {
+                    showToast("Necesitas iniciar sesión para evaluar catedráticos", "warning");
+                    setTimeout(() => {
+                        window.location.href = 'login.html';
+                    }, 1500);
+                    return;
+                }
+                
+                // Verificar si el usuario ya evaluó a este profesor
+                const hasEvaluated = await hasUserEvaluatedProfessor(id);
+                if (hasEvaluated) {
+                    showToast("Ya has evaluado a este catedrático anteriormente", "info");
+                    return;
+                }
+                
+                currentProfessorId = id;
+                const evalFormContainer = document.getElementById('eval-form-container');
+                
+                // Mostrar estado de carga
+                evalFormContainer.innerHTML = `
+                    <div class="flex justify-center items-center p-20">
+                        <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white"></div>
+                    </div>
+                `;
+                showPage('evaluation-page');
+                
+                // Re-inicializar el botón de regreso para asegurar que funcione
+                const backBtn = document.getElementById('back-from-eval-btn');
+                if (backBtn) {
+                    // Remover event listener anterior si existe
+                    backBtn.replaceWith(backBtn.cloneNode(true));
+                    // Obtener la nueva referencia y agregar el event listener
+                    const newBackBtn = document.getElementById('back-from-eval-btn');
+                    newBackBtn.addEventListener('click', () => {
+                        console.log('Regresando desde evaluación a:', previousPage);
+                        showPage(previousPage);
+                    });
+                }
+                
+                // Obtener datos del catedrático
+                const prof = await getProfessorById(id);
+                if (!prof) {
+                    evalFormContainer.innerHTML = `<div class="text-center text-white/60 py-10">Catedrático no encontrado</div>`;
+                    return;
+                }
+                
+                evalFormContainer.innerHTML = `
+                    <div class="flex items-center gap-4 mb-8">
+                        <img src="${prof.avatar}" alt="Avatar Catedrático" class="rounded-full">
+                        <div>
+                            <h2 class="text-xl font-bold">${prof.name}</h2>
+                            <p class="text-white/70">${prof.courses.join(', ')}</p>
+                        </div>
+                    </div>
+                    <form id="evaluation-form" class="space-y-6">
+                        <div>
+                            <label class="font-semibold block mb-2">Dominio del Tema</label>
+                            <div class="star-rating flex gap-2 text-3xl text-gray-500" data-rating-for="dominio"></div>
+                            <input type="hidden" name="dominio_rating" id="dominio_rating" value="0">
+                        </div>
+                        <div>
+                            <label class="font-semibold block mb-2">Metodología y Claridad</label>
+                            <div class="star-rating flex gap-2 text-3xl text-gray-500" data-rating-for="metodologia"></div>
+                            <input type="hidden" name="metodologia_rating" id="metodologia_rating" value="0">
+                        </div>
+                        <div>
+                            <label class="font-semibold block mb-2">Puntualidad y Respeto</label>
+                            <div class="star-rating flex gap-2 text-3xl text-gray-500" data-rating-for="puntualidad"></div>
+                            <input type="hidden" name="puntualidad_rating" id="puntualidad_rating" value="0">
+                        </div>
+                        <div>
+                            <label for="comments" class="font-semibold block mb-2">Comentarios Adicionales (Anónimo)</label>
+                            <textarea id="comments" name="comments" rows="4" class="w-full bg-white/10 placeholder-white/60 text-white rounded-lg p-3 ring-1 ring-white/20 focus:ring-2 focus:ring-sky-400 focus:outline-none transition" placeholder="Tu feedback detallado ayuda mucho..."></textarea>
+                        </div>
+                        <div class="pt-4 flex flex-col items-center">
+                            <button id="submit-eval-btn" type="button" class="w-full max-w-xs h-12 flex items-center justify-center bg-indigo-600 hover:bg-indigo-700 transition-colors text-white font-bold py-3 px-4 rounded-lg disabled:bg-indigo-400 disabled:cursor-not-allowed">
+                                <span class="btn-text">Enviar Evaluación</span>
+                            </button>
+                            <p class="text-xs text-white/50 mt-2">Tu evaluación es y será siempre anónima.</p>
+                        </div>
+                    </form>
+                `;
+                
+                initializeStarRatings();
+                initializeSubmitButton();
+            } catch (error) {
+                console.error("Error al cargar el formulario de evaluación:", error);
+                const evalFormContainer = document.getElementById('eval-form-container');
+                evalFormContainer.innerHTML = `
+                    <div class="text-center text-rose-400 py-10">
+                        Error al cargar el formulario. Por favor intenta más tarde.
+                    </div>
+                `;
+            }
+        };
+
+        // --- LÓGICA DE ESTRELLAS Y BOTÓN (se inicializan dinámicamente) ---
+        function initializeStarRatings() {
+            const starContainers = document.querySelectorAll('.star-rating');
+            starContainers.forEach(container => {
+                if (container.children.length > 0) return; // Ya inicializado
+                for (let i = 1; i <= 5; i++) {
+                    const starSVG = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                    starSVG.setAttribute('viewBox', '0 0 24 24');
+                    starSVG.setAttribute('fill', 'none');
+                    starSVG.setAttribute('stroke', 'currentColor');
+                    starSVG.setAttribute('stroke-width', '1.5');
+                    starSVG.setAttribute('width', '32');
+                    starSVG.setAttribute('height', '32');
+                    starSVG.dataset.value = i;
+                    starSVG.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />`;
+                    container.appendChild(starSVG);
+                }
+                
+                const stars = container.querySelectorAll('svg');
+                const ratingInput = document.getElementById(`${container.dataset.ratingFor}_rating`);
+
+                container.addEventListener('click', (e) => {
+                    const star = e.target.closest('svg');
+                    if (!star) return;
+                    ratingInput.value = star.dataset.value;
+                    updateStars(stars, ratingInput.value);
+                });
+                container.addEventListener('mouseover', (e) => {
+                    const star = e.target.closest('svg');
+                    if (!star) return;
+                    updateStars(stars, star.dataset.value);
+                });
+                container.addEventListener('mouseout', () => updateStars(stars, ratingInput.value));
+                updateStars(stars, ratingInput.value); // Estado inicial
+            });
+        }
+
+        function updateStars(stars, rating) {
+            stars.forEach(star => {
+                if (star.dataset.value <= rating) {
+                    star.style.fill = 'currentColor';
+                    star.classList.remove('text-gray-500');
+                    star.classList.add('text-yellow-400');
+                } else {
+                    star.style.fill = 'none';
+                    star.classList.remove('text-yellow-400');
+                    star.classList.add('text-gray-500');
+                }
+            });
+        }
+
+        function initializeSubmitButton() {
+            const submitBtn = document.getElementById('submit-eval-btn');
+            if (!submitBtn) return;
+            
+            submitBtn.addEventListener('click', async () => {
+                const btnText = submitBtn.querySelector('.btn-text');
+                const dominio = parseInt(document.getElementById('dominio_rating').value) || 0;
+                const metodologia = parseInt(document.getElementById('metodologia_rating').value) || 0;
+                const puntualidad = parseInt(document.getElementById('puntualidad_rating').value) || 0;
+                const comments = document.getElementById('comments').value.trim();
+                
+                // Validación básica
+                if (dominio === 0 || metodologia === 0 || puntualidad === 0) {
+                    showToast("Por favor califica todas las categorías", "warning");
+                    return;
+                }
+                
+                // 1. Estado de Carga
+                submitBtn.disabled = true;
+                btnText.textContent = 'Enviando...';
+
+                try {
+                    // 2. Enviar datos a Supabase
+                    await submitEvaluation(currentProfessorId, {
+                        dominio,
+                        metodologia,
+                        puntualidad,
+                        comments
+                    });
+                    
+                    // 3. Estado de Éxito
+                    submitBtn.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
+                    submitBtn.classList.add('bg-green-500');
+                    btnText.textContent = '¡Enviado con Éxito!';
+                    
+                    showToast("Tu evaluación ha sido registrada", "success");
+                    
+                    // 4. Actualizar lista de profesores en el dashboard también
+                    professors = await getProfessors();
+                    await renderTopRatedProfessors();
+                    
+                    // 5. Volver al perfil después de un momento y refrescar datos
+                    setTimeout(async () => {
+                        await window.viewProfessor(currentProfessorId);
+                    }, 1500);
+                    
+                } catch (error) {
+                    console.error("Error al enviar evaluación:", error);
+                    
+                    // Estado de error
+                    submitBtn.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
+                    submitBtn.classList.add('bg-rose-500');
+                    btnText.textContent = 'Error al enviar';
+                    
+                    showToast("Error al enviar la evaluación. Intenta nuevamente.", "error");
+                    
+                    // Restaurar botón después de un momento
+                    setTimeout(() => {
+                        submitBtn.classList.remove('bg-rose-500');
+                        submitBtn.classList.add('bg-indigo-600', 'hover:bg-indigo-700');
+                        btnText.textContent = 'Enviar Evaluación';
+                        submitBtn.disabled = false;
+                    }, 2000);
+                }
+            });
+        }
+        
+        // Cargar datos al inicio
+        loadInitialData();
+    </script>
+</body>
+</html>

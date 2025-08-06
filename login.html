@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Evalúa-T | Iniciar Sesión</title>
+    
+    <!-- Tailwind CSS desde CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Supabase JS -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <style>
+        /* --- Configuración Base y Fuentes --- */
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* --- Animación de fondo tipo Aurora UI --- */
+        @keyframes aurora-gradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        .aurora-background {
+            background: linear-gradient(-45deg, #0f172a, #1e293b, #334155, #082f49);
+            background-size: 400% 400%;
+            animation: aurora-gradient 15s ease infinite;
+        }
+        
+        /* --- Animación de entrada --- */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .fadeIn {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+
+        /* --- Barra de scroll personalizada --- */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+        
+        /* --- Transición entre formularios --- */
+        #login-form, #signup-form {
+            transition: all 0.3s ease;
+        }
+    </style>
+</head>
+<body class="aurora-background text-white overflow-x-hidden min-h-screen flex flex-col">
+
+    <div class="container mx-auto max-w-md px-4 sm:px-6 py-12 flex-grow flex flex-col justify-center" style="opacity: 0; transition: opacity 0.3s ease;">
+        
+        <!-- Logo y Título -->
+        <div class="text-center mb-10">
+            <h1 class="text-3xl sm:text-4xl font-bold text-white mb-2">Evalúa-T</h1>
+            <p class="text-white/70">Evaluaciones anónimas para catedráticos</p>
+        </div>
+        
+        <!-- Card de Autenticación -->
+        <div class="p-6 sm:p-8 rounded-2xl bg-white/10 backdrop-blur-lg ring-1 ring-white/20 shadow-2xl fadeIn">
+            
+            <!-- Pestañas de navegación -->
+            <div class="flex border-b border-white/20 mb-6">
+                <button id="login-tab" class="flex-1 py-3 font-semibold text-center border-b-2 border-transparent text-white/60">Iniciar Sesión</button>
+                <button id="signup-tab" class="flex-1 py-3 font-semibold text-center border-b-2 border-sky-500">Registrarse</button>
+            </div>
+            
+            <!-- Formulario de Inicio de Sesión -->
+            <div id="login-form" class="space-y-6 hidden">
+                <div>
+                    <label for="login-email" class="block text-sm font-medium mb-2">Correo Electrónico</label>
+                    <input type="email" id="login-email" class="w-full bg-white/10 placeholder-white/60 text-white rounded-lg py-3 px-4 ring-1 ring-white/20 focus:ring-2 focus:ring-sky-400 focus:outline-none transition" placeholder="tu@correo.com">
+                </div>
+                <div>
+                    <label for="login-password" class="block text-sm font-medium mb-2">Contraseña</label>
+                    <input type="password" id="login-password" class="w-full bg-white/10 placeholder-white/60 text-white rounded-lg py-3 px-4 ring-1 ring-white/20 focus:ring-2 focus:ring-sky-400 focus:outline-none transition" placeholder="••••••••">
+                </div>
+                <div id="login-error" class="text-rose-400 text-sm hidden"></div>
+                <div>
+                    <button id="login-button" class="w-full bg-indigo-600 hover:bg-indigo-700 transition-colors text-white font-bold py-3 px-4 rounded-lg">
+                        Iniciar Sesión
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Formulario de Registro -->
+            <div id="signup-form" class="space-y-6">
+                <div>
+                    <label for="signup-email" class="block text-sm font-medium mb-2">Correo Electrónico</label>
+                    <input type="email" id="signup-email" class="w-full bg-white/10 placeholder-white/60 text-white rounded-lg py-3 px-4 ring-1 ring-white/20 focus:ring-2 focus:ring-sky-400 focus:outline-none transition" placeholder="tu@correo.com">
+                </div>
+                <div>
+                    <label for="signup-password" class="block text-sm font-medium mb-2">Contraseña</label>
+                    <input type="password" id="signup-password" class="w-full bg-white/10 placeholder-white/60 text-white rounded-lg py-3 px-4 ring-1 ring-white/20 focus:ring-2 focus:ring-sky-400 focus:outline-none transition" placeholder="Mínimo 6 caracteres">
+                </div>
+                <div>
+                    <label for="signup-password-confirm" class="block text-sm font-medium mb-2">Confirmar Contraseña</label>
+                    <input type="password" id="signup-password-confirm" class="w-full bg-white/10 placeholder-white/60 text-white rounded-lg py-3 px-4 ring-1 ring-white/20 focus:ring-2 focus:ring-sky-400 focus:outline-none transition" placeholder="Confirmar contraseña">
+                </div>
+                <div id="signup-error" class="text-rose-400 text-sm hidden"></div>
+                <div>
+                    <button id="signup-button" class="w-full bg-sky-500 hover:bg-sky-600 transition-colors text-white font-bold py-3 px-4 rounded-lg">
+                        Crear Cuenta
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Información adicional -->
+            <div class="mt-8 text-center text-sm text-white/70">
+                <p class="mb-4">Para evaluar catedráticos necesitas una cuenta. Tu identidad será siempre anónima.</p>
+                <div class="bg-indigo-900/50 p-3 rounded-lg mb-4">
+                    <p class="text-white">✨ <strong>¡Nuevo!</strong> Ya puedes registrarte e iniciar sesión para evaluar a tus catedráticos de forma anónima.</p>
+                </div>
+                <a href="index.html" class="text-sky-400 hover:text-sky-300">Ver evaluaciones sin iniciar sesión</a>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Footer -->
+    <footer class="py-6 text-center text-white/50 text-sm">
+        <p>Evalúa-T © 2025 · Evaluaciones anónimas para estudiantes</p>
+    </footer>
+
+    <!-- Script de autenticación -->
+    <script type="module">
+        import { signIn, signUp, isAuthenticated } from './supabase.js';
+        
+        // Verificar si el usuario ya está autenticado
+        async function checkAuth() {
+            try {
+                const isUserAuth = await isAuthenticated();
+                if (isUserAuth) {
+                    // Si ya está autenticado, dar opción de ir al dashboard
+                    document.querySelector('.container').style.opacity = '1';
+                    
+                    // Mostrar mensaje de que ya está autenticado
+                    document.querySelector('.container').innerHTML = `
+                        <div class="text-center py-10 fadeIn">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto h-16 w-16 text-green-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <h2 class="text-2xl font-bold mb-2">¡Ya has iniciado sesión!</h2>
+                            <p class="mb-6 text-white/70">Ya tienes una sesión activa en Evalúa-T</p>
+                            <button id="go-to-dashboard-btn" class="bg-indigo-600 hover:bg-indigo-700 transition-colors text-white font-bold py-3 px-6 rounded-lg">
+                                Ir al Dashboard
+                            </button>
+                        </div>
+                    `;
+                    
+                    // Añadir evento al botón
+                    document.getElementById('go-to-dashboard-btn').addEventListener('click', () => {
+                        window.location.href = 'index.html';
+                    });
+                } else {
+                    // Si no está autenticado, mostrar los formularios
+                    document.querySelector('.container').style.opacity = '1';
+                }
+            } catch (error) {
+                console.error('Error al verificar autenticación:', error);
+                // Mostrar los formularios de todos modos
+                document.querySelector('.container').style.opacity = '1';
+            }
+        }
+        
+        // Verificar estado de autenticación al cargar la página
+        checkAuth();
+        
+        // Referencias a elementos del DOM
+        const loginTab = document.getElementById('login-tab');
+        const signupTab = document.getElementById('signup-tab');
+        const loginForm = document.getElementById('login-form');
+        const signupForm = document.getElementById('signup-form');
+        const loginButton = document.getElementById('login-button');
+        const signupButton = document.getElementById('signup-button');
+        const loginError = document.getElementById('login-error');
+        const signupError = document.getElementById('signup-error');
+        
+        // Cambiar entre formularios
+        loginTab.addEventListener('click', () => {
+            loginTab.classList.add('border-sky-500');
+            loginTab.classList.remove('text-white/60', 'border-transparent');
+            signupTab.classList.remove('border-sky-500');
+            signupTab.classList.add('text-white/60', 'border-transparent');
+            loginForm.classList.remove('hidden');
+            signupForm.classList.add('hidden');
+        });
+        
+        signupTab.addEventListener('click', () => {
+            signupTab.classList.add('border-sky-500');
+            signupTab.classList.remove('text-white/60', 'border-transparent');
+            loginTab.classList.remove('border-sky-500');
+            loginTab.classList.add('text-white/60', 'border-transparent');
+            signupForm.classList.remove('hidden');
+            loginForm.classList.add('hidden');
+        });
+        
+        // Manejar inicio de sesión
+        loginButton.addEventListener('click', async () => {
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+            
+            // Validación básica
+            if (!email || !password) {
+                loginError.textContent = 'Por favor completa todos los campos';
+                loginError.classList.remove('hidden');
+                return;
+            }
+            
+            try {
+                // Mostrar estado de carga
+                loginButton.innerHTML = `
+                    <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Iniciando sesión...
+                `;
+                loginButton.disabled = true;
+                
+                await signIn(email, password);
+                window.location.href = 'index.html';
+            } catch (error) {
+                console.error('Error de inicio de sesión:', error);
+                loginError.textContent = 'Credenciales incorrectas. Por favor verifica e intenta de nuevo.';
+                loginError.classList.remove('hidden');
+                loginButton.innerHTML = 'Iniciar Sesión';
+                loginButton.disabled = false;
+            }
+        });
+        
+        // Manejar registro
+        signupButton.addEventListener('click', async () => {
+            const email = document.getElementById('signup-email').value;
+            const password = document.getElementById('signup-password').value;
+            const passwordConfirm = document.getElementById('signup-password-confirm').value;
+            
+            // Limpiar errores previos
+            signupError.textContent = '';
+            signupError.classList.add('hidden');
+            
+            // Validación básica
+            if (!email || !password || !passwordConfirm) {
+                signupError.textContent = 'Por favor completa todos los campos';
+                signupError.classList.remove('hidden');
+                return;
+            }
+            
+            // Validación del correo electrónico
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                signupError.textContent = 'Por favor ingresa un correo electrónico válido';
+                signupError.classList.remove('hidden');
+                return;
+            }
+            
+            if (password !== passwordConfirm) {
+                signupError.textContent = 'Las contraseñas no coinciden';
+                signupError.classList.remove('hidden');
+                return;
+            }
+            
+            if (password.length < 6) {
+                signupError.textContent = 'La contraseña debe tener al menos 6 caracteres';
+                signupError.classList.remove('hidden');
+                return;
+            }
+            
+            try {
+                // Mostrar estado de carga
+                signupButton.innerHTML = `
+                    <svg class="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Creando cuenta...
+                `;
+                signupButton.disabled = true;
+                
+                await signUp(email, password);
+                
+                // Mostrar mensaje de éxito antes de redirigir al login
+                signupForm.innerHTML = `
+                    <div class="text-center py-6">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="mx-auto h-12 w-12 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                        <h3 class="mt-2 text-xl font-medium text-white">¡Cuenta creada con éxito!</h3>
+                        <p class="mt-1 text-sm text-white/70">Ahora debes iniciar sesión para evaluar catedráticos.</p>
+                        <p class="mt-4">
+                            <button id="go-to-login" class="mt-3 bg-indigo-600 hover:bg-indigo-700 transition-colors text-white font-bold py-2 px-6 rounded-lg">
+                                Iniciar sesión
+                            </button>
+                        </p>
+                    </div>
+                `;
+                
+                // Preparar el inicio de sesión automático después de 3 segundos
+                setTimeout(() => {
+                    // Cambiar a la pestaña de login y mostrar formulario de login
+                    loginTab.click();
+                    
+                    // Rellenar el email automáticamente
+                    document.getElementById('login-email').value = email;
+                    document.getElementById('login-password').focus();
+                    
+                    // Mostrar mensaje de ayuda
+                    const loginHelp = document.createElement('div');
+                    loginHelp.className = 'text-green-400 text-sm mt-2 text-center';
+                    loginHelp.textContent = '¡Cuenta creada! Por favor, inicia sesión con tu contraseña.';
+                    document.getElementById('login-error').before(loginHelp);
+                }, 2500);
+                
+                // Manejar el botón de ir al login
+                document.getElementById('go-to-login').addEventListener('click', () => {
+                    loginTab.click();
+                });
+                
+            } catch (error) {
+                console.error('Error de registro:', error);
+                
+                // Manejar diferentes tipos de error
+                if (error.message?.includes('email') || error.message?.includes('correo')) {
+                    signupError.textContent = 'Este correo ya está registrado. Intenta con otro o inicia sesión.';
+                } else if (error.message?.includes('password')) {
+                    signupError.textContent = 'La contraseña es demasiado débil. Usa al menos 6 caracteres.';
+                } else {
+                    signupError.textContent = 'Error al crear la cuenta. Por favor intenta nuevamente más tarde.';
+                }
+                
+                signupError.classList.remove('hidden');
+                signupButton.textContent = 'Crear Cuenta';
+                signupButton.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
