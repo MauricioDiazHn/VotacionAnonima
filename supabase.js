@@ -2,7 +2,7 @@
 
 // Configuración de Supabase usando variables de entorno con fallback
 const SUPABASE_URL = 'https://onncrefefsvdmpxthxtw.supabase.co';
-const SUPABASE_KEY = import.meta.env?.VITE_SUPABASE_KEY;
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9ubmNyZWZlZnN2ZG1weHRoeHR3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ0Mjk5MDksImV4cCI6MjA3MDAwNTkwOX0.UEmH6tAFz4SmS1dtJS0fYq0V0bXC_ixZspy08Dx-xZ8';
 
 // Inicializar cliente de Supabase
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
@@ -96,7 +96,10 @@ async function getProfessorById(id) {
     .select(`
       *,
       ratings(*),
-      comments(*)
+      comments(
+        *,
+        comment_likes(id)
+      )
     `)
     .eq('id', id)
     .single();
@@ -109,6 +112,14 @@ async function getProfessorById(id) {
     data.rating = parseFloat(averageRating.toFixed(1));
   } else {
     data.rating = 0;
+  }
+  
+  // Agregar conteo de likes a cada comentario y ordenar por likes
+  if (data && data.comments) {
+    data.comments = data.comments.map(comment => {
+      comment.likes_count = comment.comment_likes?.length || 0;
+      return comment;
+    }).sort((a, b) => (b.likes_count || 0) - (a.likes_count || 0)); // Ordenar por likes descendente
   }
   
   return data;
@@ -350,7 +361,8 @@ async function getAllCommentsWithProfessors() {
         avatar, 
         rating,
         ratings(dominio, metodologia, puntualidad, average)
-      )
+      ),
+      comment_likes(id)
     `)
     .order('date', { ascending: false }); // Más recientes primero
     
@@ -367,15 +379,95 @@ async function getAllCommentsWithProfessors() {
         comments: []
       };
     }
+    
+    // Agregar conteo de likes al comentario
+    comment.likes_count = comment.comment_likes?.length || 0;
+    
     professorComments[profId].comments.push(comment);
   });
   
-  // Convertir a array y ordenar por rating del profesor
+  // Ordenar comentarios de cada profesor por likes (mayor a menor)
+  Object.values(professorComments).forEach(profData => {
+    profData.comments.sort((a, b) => (b.likes_count || 0) - (a.likes_count || 0));
+  });
+  
+  // Convertir a array y ordenar profesores por rating
   const result = Object.values(professorComments).sort((a, b) => 
     (b.professor.rating || 0) - (a.professor.rating || 0)
   );
   
   return result;
+}
+
+// Dar like a un comentario
+async function likeComment(commentId) {
+  const user = await getCurrentUser();
+  if (!user) throw new Error('Usuario no autenticado');
+
+  const { data, error } = await supabaseClient
+    .from('comment_likes')
+    .insert({
+      comment_id: commentId,
+      user_id: user.id
+    })
+    .select();
+    
+  if (error) {
+    // Si ya existe el like, quitar el like (toggle)
+    if (error.code === '23505') { // Unique constraint violation
+      return await unlikeComment(commentId);
+    }
+    throw error;
+  }
+  
+  return data;
+}
+
+// Quitar like de un comentario
+async function unlikeComment(commentId) {
+  const user = await getCurrentUser();
+  if (!user) throw new Error('Usuario no autenticado');
+
+  const { data, error } = await supabaseClient
+    .from('comment_likes')
+    .delete()
+    .eq('comment_id', commentId)
+    .eq('user_id', user.id)
+    .select();
+    
+  if (error) throw error;
+  return data;
+}
+
+// Verificar si el usuario ya dio like a un comentario
+async function hasUserLikedComment(commentId) {
+  const user = await getCurrentUser();
+  if (!user) return false;
+
+  const { data, error } = await supabaseClient
+    .from('comment_likes')
+    .select('id')
+    .eq('comment_id', commentId)
+    .eq('user_id', user.id)
+    .maybeSingle();
+    
+  if (error) throw error;
+  return data !== null;
+}
+
+// Obtener likes de múltiples comentarios para el usuario actual
+async function getUserLikesForComments(commentIds) {
+  const user = await getCurrentUser();
+  if (!user || !commentIds.length) return [];
+
+  const { data, error } = await supabaseClient
+    .from('comment_likes')
+    .select('comment_id')
+    .eq('user_id', user.id)
+    .in('comment_id', commentIds);
+    
+  if (error) throw error;
+  return data.map(like => like.comment_id);
 }
 
 // Agregar un nuevo catedrático (función anónima)
@@ -487,6 +579,10 @@ export {
   getUserEvaluations,
   getUserComments,
   getAllCommentsWithProfessors,
+  likeComment,
+  unlikeComment,
+  hasUserLikedComment,
+  getUserLikesForComments,
   addProfessor,
   syncAllProfessorRatings,
   getRandomUnevaluatedProfessor
