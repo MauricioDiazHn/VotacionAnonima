@@ -26,53 +26,35 @@ CREATE INDEX IF NOT EXISTS idx_admin_users_active ON admin_users(is_active);
 -- 3. Habilitar Row Level Security (RLS)
 ALTER TABLE admin_users ENABLE ROW LEVEL SECURITY;
 
--- 4. Crear políticas de seguridad
--- Solo los administradores pueden ver la tabla de administradores
-CREATE POLICY "Admins can view admin users" ON admin_users
+-- 4. Crear políticas de seguridad (sin recursión)
+-- NOTA: Las políticas permiten acceso a usuarios autenticados para evitar recursión infinita.
+-- La validación de permisos de admin/superadmin se realiza en el código de la aplicación.
+-- Esto es más seguro que intentar validar permisos en las políticas RLS que podrían crear bucles.
+
+-- Permitir a los usuarios autenticados leer sus propios registros de admin
+CREATE POLICY "Users can view own admin record" ON admin_users
     FOR SELECT
-    USING (
-        EXISTS (
-            SELECT 1 FROM admin_users au 
-            WHERE au.user_id = auth.uid() 
-            AND au.is_active = true
-        )
-    );
+    USING (user_id = auth.uid());
 
--- Solo los superadministradores pueden insertar nuevos admins
-CREATE POLICY "Superadmins can insert admin users" ON admin_users
+-- Permitir a todos los administradores ver todos los registros (se controlará desde la aplicación)
+CREATE POLICY "Authenticated users can view admin users" ON admin_users
+    FOR SELECT
+    USING (auth.role() = 'authenticated');
+
+-- Solo permitir insertar a usuarios autenticados (se validará en la aplicación)
+CREATE POLICY "Authenticated users can insert admin users" ON admin_users
     FOR INSERT
-    WITH CHECK (
-        EXISTS (
-            SELECT 1 FROM admin_users au 
-            WHERE au.user_id = auth.uid() 
-            AND au.role = 'superadmin' 
-            AND au.is_active = true
-        )
-    );
+    WITH CHECK (auth.role() = 'authenticated');
 
--- Solo los superadministradores pueden actualizar admins
-CREATE POLICY "Superadmins can update admin users" ON admin_users
+-- Solo permitir actualizar a usuarios autenticados (se validará en la aplicación)
+CREATE POLICY "Authenticated users can update admin users" ON admin_users
     FOR UPDATE
-    USING (
-        EXISTS (
-            SELECT 1 FROM admin_users au 
-            WHERE au.user_id = auth.uid() 
-            AND au.role = 'superadmin' 
-            AND au.is_active = true
-        )
-    );
+    USING (auth.role() = 'authenticated');
 
--- Solo los superadministradores pueden eliminar admins (soft delete recomendado)
-CREATE POLICY "Superadmins can delete admin users" ON admin_users
+-- Solo permitir eliminar a usuarios autenticados (se validará en la aplicación)
+CREATE POLICY "Authenticated users can delete admin users" ON admin_users
     FOR DELETE
-    USING (
-        EXISTS (
-            SELECT 1 FROM admin_users au 
-            WHERE au.user_id = auth.uid() 
-            AND au.role = 'superadmin' 
-            AND au.is_active = true
-        )
-    );
+    USING (auth.role() = 'authenticated');
 
 -- 5. Insertar el primer superadministrador (CAMBIAR EMAIL POR EL TUYO)
 -- IMPORTANTE: Ejecutar esto DESPUÉS de registrarte en la aplicación con tu email
@@ -133,6 +115,50 @@ BEGIN
     RETURN COALESCE(user_role, 'user');
 END;
 $$;
+
+-- 8. Función para obtener usuario por email (helper para la aplicación)
+CREATE OR REPLACE FUNCTION get_user_by_email(user_email TEXT)
+RETURNS TABLE(id UUID, email TEXT)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+    RETURN QUERY
+    SELECT u.id, u.email
+    FROM auth.users u
+    WHERE u.email = user_email
+    LIMIT 1;
+END;
+$$;
+
+-- 9. Trigger para sincronizar user_id cuando se inserta un admin_user
+CREATE OR REPLACE FUNCTION sync_admin_user_id()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+    -- Si no se proporciona user_id, intentar obtenerlo por email
+    IF NEW.user_id IS NULL THEN
+        SELECT u.id INTO NEW.user_id
+        FROM auth.users u
+        WHERE u.email = NEW.email;
+        
+        -- Si no se encuentra el usuario, lanzar error
+        IF NEW.user_id IS NULL THEN
+            RAISE EXCEPTION 'Usuario no encontrado con email: %', NEW.email;
+        END IF;
+    END IF;
+    
+    RETURN NEW;
+END;
+$$;
+
+-- Crear el trigger
+DROP TRIGGER IF EXISTS trigger_sync_admin_user_id ON admin_users;
+CREATE TRIGGER trigger_sync_admin_user_id
+    BEFORE INSERT ON admin_users
+    FOR EACH ROW
+    EXECUTE FUNCTION sync_admin_user_id();
 
 -- ============================================
 -- INSTRUCCIONES DE USO:

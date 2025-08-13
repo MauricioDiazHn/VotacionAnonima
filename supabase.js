@@ -814,25 +814,30 @@ async function addAdmin(email, role = 'admin') {
     const isSuper = await isSuperAdmin();
     if (!isSuper) throw new Error('No tienes permisos para agregar administradores');
 
-    // Buscar el usuario por email
-    const { data: users, error: userError } = await supabaseClient
-      .from('auth.users')
-      .select('id, email')
-      .eq('email', email)
-      .limit(1);
+    // Buscar el usuario por email en la tabla auth.users usando una función de Supabase
+    const { data: userData, error: userError } = await supabaseClient.rpc('get_user_by_email', {
+      user_email: email
+    });
 
-    if (userError) throw userError;
-    if (!users || users.length === 0) {
-      throw new Error('Usuario no encontrado. El usuario debe registrarse primero en la aplicación.');
+    if (userError) {
+      // Si la función no existe, intentar el método alternativo
+      console.log('Función get_user_by_email no disponible, verificando existencia del usuario...');
+      
+      // Verificar que el email no esté ya en admin_users
+      const { data: existingAdmin, error: checkError } = await supabaseClient
+        .from('admin_users')
+        .select('email')
+        .eq('email', email)
+        .maybeSingle();
+
+      if (checkError) throw checkError;
+      if (existingAdmin) throw new Error('Este usuario ya es administrador');
     }
 
-    const targetUser = users[0];
-
-    // Insertar en admin_users
+    // Insertar en admin_users (el user_id se manejará en el trigger o se puede dejar null inicialmente)
     const { data, error } = await supabaseClient
       .from('admin_users')
       .insert({
-        user_id: targetUser.id,
         email: email,
         role: role,
         created_by: currentUser.id,
@@ -840,7 +845,13 @@ async function addAdmin(email, role = 'admin') {
       })
       .select();
 
-    if (error) throw error;
+    if (error) {
+      if (error.code === '23505') { // Constraint violation
+        throw new Error('Este usuario ya es administrador');
+      }
+      throw error;
+    }
+    
     return data[0];
   } catch (error) {
     console.error('Error agregando administrador:', error);
