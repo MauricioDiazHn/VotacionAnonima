@@ -692,6 +692,236 @@ async function getTopContributors(limit = 10) {
   return data;
 }
 
+// === FUNCIONES ESPECÍFICAS DEL ADMIN ===
+
+// Verificar si el usuario es administrador
+async function isAdmin(userEmail) {
+  // Lista de emails de administradores - puedes modificar esto
+  const adminEmails = [
+    'mauricio.diaz@admin.com',
+    'admin@evalua-t.com',
+    'tu-email@admin.com', // Cambia esto por tu email real
+    // Agregar más emails de admin aquí
+  ];
+  
+  return adminEmails.includes(userEmail);
+}
+
+// Obtener todos los recursos para el admin
+async function getAllResourcesForAdmin() {
+  try {
+    const { data, error } = await supabaseClient
+      .from('recursos')
+      .select(`
+        *,
+        professors(id, name),
+        profiles(full_name)
+      `)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error('Error obteniendo recursos para admin:', error);
+    throw error;
+  }
+}
+
+// Actualizar estado de un recurso (solo admin)
+async function updateResourceStatus(resourceId, newStatus) {
+  try {
+    const { data, error } = await supabaseClient
+      .from('recursos')
+      .update({ 
+        status: newStatus,
+        fecha_revision: new Date().toISOString()
+      })
+      .eq('id', resourceId)
+      .select();
+
+    if (error) throw error;
+    return data[0];
+  } catch (error) {
+    console.error('Error actualizando estado del recurso:', error);
+    throw error;
+  }
+}
+
+// Eliminar recurso permanentemente (solo admin)
+async function deleteResourcePermanently(resourceId) {
+  try {
+    // Primero obtenemos la información del archivo para eliminarlo del storage
+    const { data: recurso, error: fetchError } = await supabaseClient
+      .from('recursos')
+      .select('path_storage')
+      .eq('id', resourceId)
+      .single();
+
+    if (fetchError) throw fetchError;
+
+    // Eliminar archivo del storage si existe
+    if (recurso.path_storage) {
+      const fileName = recurso.path_storage.replace('recursos-pro/', '');
+      await supabaseClient.storage
+        .from('recursos-pro')
+        .remove([fileName]);
+    }
+
+    // Eliminar registro de la base de datos
+    const { error } = await supabaseClient
+      .from('recursos')
+      .delete()
+      .eq('id', resourceId);
+
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    console.error('Error eliminando recurso:', error);
+    throw error;
+  }
+}
+
+// Obtener estadísticas generales para el dashboard admin
+async function getAdminStats() {
+  try {
+    // Obtener conteos de recursos por estado
+    const { data: recursos, error: recursosError } = await supabaseClient
+      .from('recursos')
+      .select('status, id_usuario_que_subio');
+
+    if (recursosError) throw recursosError;
+
+    // Obtener conteo de usuarios únicos
+    const usuariosUnicos = new Set(recursos.map(r => r.id_usuario_que_subio)).size;
+
+    const stats = {
+      total: recursos.length,
+      pendientes: recursos.filter(r => r.status === 'pendiente').length,
+      aprobados: recursos.filter(r => r.status === 'aprobado').length,
+      rechazados: recursos.filter(r => r.status === 'rechazado').length,
+      usuariosActivos: usuariosUnicos
+    };
+
+    return stats;
+  } catch (error) {
+    console.error('Error obteniendo estadísticas del admin:', error);
+    throw error;
+  }
+}
+
+// Obtener recursos pendientes de aprobación
+async function getPendingResources() {
+  try {
+    const { data, error } = await supabaseClient
+      .from('recursos')
+      .select(`
+        *,
+        professors(id, name),
+        profiles(full_name)
+      `)
+      .eq('status', 'pendiente')
+      .order('created_at', { ascending: true }); // Los más antiguos primero
+
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error('Error obteniendo recursos pendientes:', error);
+    throw error;
+  }
+}
+
+// Aprobar recurso en lote
+async function approveResourcesBatch(resourceIds) {
+  try {
+    const { data, error } = await supabaseClient
+      .from('recursos')
+      .update({ 
+        status: 'aprobado',
+        fecha_revision: new Date().toISOString()
+      })
+      .in('id', resourceIds)
+      .select();
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error aprobando recursos en lote:', error);
+    throw error;
+  }
+}
+
+// Rechazar recurso en lote
+async function rejectResourcesBatch(resourceIds) {
+  try {
+    const { data, error } = await supabaseClient
+      .from('recursos')
+      .update({ 
+        status: 'rechazado',
+        fecha_revision: new Date().toISOString()
+      })
+      .in('id', resourceIds)
+      .select();
+
+    if (error) throw error;
+    return data;
+  } catch (error) {
+    console.error('Error rechazando recursos en lote:', error);
+    throw error;
+  }
+}
+
+// Buscar recursos por criterios específicos
+async function searchResourcesForAdmin(filters) {
+  try {
+    let query = supabaseClient
+      .from('recursos')
+      .select(`
+        *,
+        professors(id, name),
+        profiles(full_name)
+      `);
+
+    // Aplicar filtros
+    if (filters.status && filters.status !== 'all') {
+      query = query.eq('status', filters.status);
+    }
+
+    if (filters.professorId) {
+      query = query.eq('id_catedratico', filters.professorId);
+    }
+
+    if (filters.tipoRecurso) {
+      query = query.eq('tipo_recurso', filters.tipoRecurso);
+    }
+
+    if (filters.periodoAcademico) {
+      query = query.eq('periodo_academico', filters.periodoAcademico);
+    }
+
+    if (filters.searchTerm) {
+      query = query.ilike('nombre_archivo', `%${filters.searchTerm}%`);
+    }
+
+    if (filters.dateFrom) {
+      query = query.gte('created_at', filters.dateFrom);
+    }
+
+    if (filters.dateTo) {
+      query = query.lte('created_at', filters.dateTo);
+    }
+
+    query = query.order('created_at', { ascending: false });
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error('Error buscando recursos para admin:', error);
+    throw error;
+  }
+}
+
 // Exportar todas las funciones
 export {
   signIn,
@@ -720,5 +950,15 @@ export {
   uploadResource,
   rateResource,
   getUserStats,
-  getTopContributors
+  getTopContributors,
+  // Funciones de admin
+  isAdmin,
+  getAllResourcesForAdmin,
+  updateResourceStatus,
+  deleteResourcePermanently,
+  getAdminStats,
+  getPendingResources,
+  approveResourcesBatch,
+  rejectResourcesBatch,
+  searchResourcesForAdmin
 };

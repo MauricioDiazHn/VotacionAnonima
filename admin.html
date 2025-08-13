@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard SuperAdmin - Evalúa-T</title>
+    
+    <!-- Tailwind CSS desde CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Supabase JS -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <style>
+        /* --- Configuración Base y Fuentes --- */
+        body {
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* --- Animación de fondo tipo Aurora UI --- */
+        @keyframes aurora-gradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        .aurora-background {
+            background: linear-gradient(-45deg, #0f172a, #1e293b, #334155, #082f49);
+            background-size: 400% 400%;
+            animation: aurora-gradient 15s ease infinite;
+        }
+        
+        /* --- Animación de entrada --- */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .fadeIn {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+
+        /* --- Barra de scroll personalizada --- */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+
+        /* --- Estilos para el dashboard admin --- */
+        .admin-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 16px;
+            transition: all 0.3s ease;
+        }
+
+        .admin-card:hover {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: rgba(255, 255, 255, 0.3);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        }
+
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status-pendiente {
+            background: rgba(251, 191, 36, 0.2);
+            color: #fbbf24;
+            border: 1px solid rgba(251, 191, 36, 0.4);
+        }
+
+        .status-aprobado {
+            background: rgba(34, 197, 94, 0.2);
+            color: #22c55e;
+            border: 1px solid rgba(34, 197, 94, 0.4);
+        }
+
+        .status-rechazado {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.4);
+        }
+
+        .file-preview {
+            width: 48px;
+            height: 48px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 0.75rem;
+        }
+
+        .file-type-pdf { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+        .file-type-doc { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
+        .file-type-ppt { background: rgba(249, 115, 22, 0.2); color: #f97316; }
+        .file-type-xls { background: rgba(34, 197, 94, 0.2); color: #22c55e; }
+        .file-type-other { background: rgba(156, 163, 175, 0.2); color: #9ca3af; }
+
+        .admin-badge {
+            background: linear-gradient(45deg, #dc2626, #b91c1c);
+            color: white;
+            font-weight: 700;
+            font-size: 0.75rem;
+            padding: 2px 8px;
+            border-radius: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            box-shadow: 0 2px 4px rgba(220, 38, 38, 0.3);
+        }
+    </style>
+</head>
+<body class="aurora-background text-white overflow-x-hidden min-h-screen">
+
+    <div class="container mx-auto px-4 sm:px-6 py-8">
+        
+        <!-- Header del Dashboard -->
+        <header class="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
+            <div>
+                <div class="flex items-center gap-3 mb-2">
+                    <h1 class="text-2xl sm:text-3xl font-bold text-white">Dashboard SuperAdmin</h1>
+                    <span class="admin-badge">ADMIN</span>
+                </div>
+                <p class="text-white/70">Gestión de recursos y moderación de contenido</p>
+            </div>
+            
+            <div class="flex items-center gap-4">
+                <div id="admin-stats" class="flex items-center gap-4 text-sm">
+                    <!-- Se llenará dinámicamente -->
+                </div>
+                <a href="index.html" class="bg-white/10 hover:bg-white/20 transition-colors text-white px-4 py-2 rounded-lg">
+                    ← Volver al sitio
+                </a>
+            </div>
+        </header>
+
+        <!-- Estadísticas rápidas -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <div class="admin-card p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-white/60 text-sm">Pendientes</p>
+                        <p class="text-2xl font-bold text-amber-400" id="stat-pendientes">-</p>
+                    </div>
+                    <div class="w-12 h-12 bg-amber-500/20 rounded-lg flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-amber-400">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <polyline points="12,6 12,12 16,14"></polyline>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+
+            <div class="admin-card p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-white/60 text-sm">Aprobados</p>
+                        <p class="text-2xl font-bold text-emerald-400" id="stat-aprobados">-</p>
+                    </div>
+                    <div class="w-12 h-12 bg-emerald-500/20 rounded-lg flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-emerald-400">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                            <polyline points="22,4 12,14.01 9,11.01"></polyline>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+
+            <div class="admin-card p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-white/60 text-sm">Total Recursos</p>
+                        <p class="text-2xl font-bold text-blue-400" id="stat-total">-</p>
+                    </div>
+                    <div class="w-12 h-12 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-blue-400">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                            <polyline points="14,2 14,8 20,8"></polyline>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+
+            <div class="admin-card p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-white/60 text-sm">Usuarios Activos</p>
+                        <p class="text-2xl font-bold text-purple-400" id="stat-usuarios">-</p>
+                    </div>
+                    <div class="w-12 h-12 bg-purple-500/20 rounded-lg flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-purple-400">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                            <circle cx="9" cy="7" r="4"></circle>
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                        </svg>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filtros -->
+        <div class="admin-card p-6 mb-8">
+            <div class="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
+                <div class="flex flex-wrap gap-3">
+                    <button class="filter-btn active px-4 py-2 rounded-lg bg-white/20 text-white border border-white/30" data-status="all">
+                        Todos
+                    </button>
+                    <button class="filter-btn px-4 py-2 rounded-lg bg-white/10 text-white/70 border border-white/20 hover:bg-white/20 transition-colors" data-status="pendiente">
+                        Pendientes
+                    </button>
+                    <button class="filter-btn px-4 py-2 rounded-lg bg-white/10 text-white/70 border border-white/20 hover:bg-white/20 transition-colors" data-status="aprobado">
+                        Aprobados
+                    </button>
+                    <button class="filter-btn px-4 py-2 rounded-lg bg-white/10 text-white/70 border border-white/20 hover:bg-white/20 transition-colors" data-status="rechazado">
+                        Rechazados
+                    </button>
+                </div>
+                
+                <div class="flex gap-3">
+                    <input type="text" id="search-input" placeholder="Buscar por nombre de archivo..." class="bg-white/10 text-white rounded-lg py-2 px-4 border border-white/20 focus:border-white/40 focus:outline-none placeholder-white/50">
+                    <button id="refresh-btn" class="bg-blue-600 hover:bg-blue-700 transition-colors text-white px-4 py-2 rounded-lg flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
+                            <path d="M21 3v5h-5"></path>
+                            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path>
+                            <path d="M3 21v-5h5"></path>
+                        </svg>
+                        Actualizar
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Lista de recursos -->
+        <div class="admin-card p-6">
+            <h2 class="text-xl font-semibold mb-6">Recursos para Revisión</h2>
+            
+            <!-- Loading -->
+            <div id="loading" class="text-center py-12">
+                <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white mx-auto mb-4"></div>
+                <p class="text-white/60">Cargando recursos...</p>
+            </div>
+
+            <!-- Lista -->
+            <div id="recursos-lista" class="space-y-4 hidden">
+                <!-- Se llenará dinámicamente -->
+            </div>
+
+            <!-- Empty state -->
+            <div id="empty-state" class="text-center py-12 hidden">
+                <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" class="mx-auto mb-4 text-white/40">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14,2 14,8 20,8"></polyline>
+                </svg>
+                <p class="text-white/60">No hay recursos que coincidan con los filtros</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de confirmación -->
+    <div id="confirmation-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white/10 backdrop-blur-lg rounded-2xl ring-1 ring-white/20 shadow-2xl p-6 w-full max-w-md">
+            <div class="flex items-center gap-3 mb-4">
+                <div id="modal-icon" class="w-12 h-12 rounded-lg flex items-center justify-center">
+                    <!-- Se llenará dinámicamente -->
+                </div>
+                <div>
+                    <h3 id="modal-title" class="text-lg font-semibold text-white"></h3>
+                    <p id="modal-subtitle" class="text-sm text-white/60"></p>
+                </div>
+            </div>
+            
+            <p id="modal-message" class="text-white/80 mb-6"></p>
+            
+            <div class="flex gap-3">
+                <button id="modal-cancel" class="flex-1 bg-white/10 hover:bg-white/20 transition-colors text-white py-2 px-4 rounded-lg">
+                    Cancelar
+                </button>
+                <button id="modal-confirm" class="flex-1 py-2 px-4 rounded-lg font-medium">
+                    <!-- Color se asigna dinámicamente -->
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { 
+            isAuthenticated, 
+            getCurrentUser,
+            signOut,
+            isAdmin,
+            getAllResourcesForAdmin,
+            updateResourceStatus,
+            deleteResourcePermanently,
+            getAdminStats
+        } from './supabase.js';
+
+        // Variables globales
+        let currentUser = null;
+        let allRecursos = [];
+        let filteredRecursos = [];
+        let currentFilter = 'all';
+
+        // Verificar autenticación de admin
+        async function checkAdminAuth() {
+            try {
+                const isAuth = await isAuthenticated();
+                if (!isAuth) {
+                    window.location.href = 'login.html';
+                    return false;
+                }
+
+                currentUser = await getCurrentUser();
+                
+                // Verificar si el usuario es admin
+                const adminCheck = await isAdmin(currentUser.email);
+                
+                if (!adminCheck) {
+                    alert('Acceso denegado. Solo para administradores.');
+                    window.location.href = 'index.html';
+                    return false;
+                }
+
+                return true;
+            } catch (error) {
+                console.error('Error verificando autenticación admin:', error);
+                window.location.href = 'login.html';
+                return false;
+            }
+        }
+
+        // Cargar todos los recursos
+        async function loadAllRecursos() {
+            try {
+                allRecursos = await getAllResourcesForAdmin();
+                filteredRecursos = [...allRecursos];
+                
+                updateStats();
+                renderRecursos();
+                
+            } catch (error) {
+                console.error('Error cargando recursos:', error);
+                showToast('Error al cargar recursos', 'error');
+            }
+        }
+
+        // Actualizar estadísticas
+        async function updateStats() {
+            try {
+                const stats = await getAdminStats();
+                
+                document.getElementById('stat-pendientes').textContent = stats.pendientes;
+                document.getElementById('stat-aprobados').textContent = stats.aprobados;
+                document.getElementById('stat-total').textContent = stats.total;
+                document.getElementById('stat-usuarios').textContent = stats.usuariosActivos;
+            } catch (error) {
+                console.error('Error actualizando estadísticas:', error);
+                // Fallback local
+                const pendientes = allRecursos.filter(r => r.status === 'pendiente').length;
+                const aprobados = allRecursos.filter(r => r.status === 'aprobado').length;
+                const total = allRecursos.length;
+                const usuariosUnicos = new Set(allRecursos.map(r => r.id_usuario_que_subio)).size;
+
+                document.getElementById('stat-pendientes').textContent = pendientes;
+                document.getElementById('stat-aprobados').textContent = aprobados;
+                document.getElementById('stat-total').textContent = total;
+                document.getElementById('stat-usuarios').textContent = usuariosUnicos;
+            }
+        }
+
+        // Renderizar lista de recursos
+        function renderRecursos() {
+            const loading = document.getElementById('loading');
+            const lista = document.getElementById('recursos-lista');
+            const emptyState = document.getElementById('empty-state');
+
+            loading.classList.add('hidden');
+
+            if (filteredRecursos.length === 0) {
+                lista.classList.add('hidden');
+                emptyState.classList.remove('hidden');
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            lista.classList.remove('hidden');
+
+            lista.innerHTML = filteredRecursos.map(recurso => {
+                const fileExt = recurso.nombre_archivo.split('.').pop().toLowerCase();
+                const fileTypeClass = getFileTypeClass(fileExt);
+                const fileTypeIcon = getFileTypeIcon(fileExt);
+                
+                return `
+                    <div class="admin-card p-6" data-id="${recurso.id}">
+                        <div class="flex flex-col lg:flex-row lg:items-center gap-4">
+                            <!-- Archivo info -->
+                            <div class="flex items-center gap-4 flex-1">
+                                <div class="file-preview ${fileTypeClass}">
+                                    ${fileTypeIcon}
+                                </div>
+                                
+                                <div class="flex-1 min-w-0">
+                                    <h3 class="font-medium text-white truncate mb-1">${recurso.nombre_archivo}</h3>
+                                    <div class="flex flex-wrap items-center gap-3 text-sm text-white/60">
+                                        <span class="px-2 py-1 bg-white/10 rounded-full">${recurso.tipo_recurso}</span>
+                                        <span>${recurso.periodo_academico}</span>
+                                        <span>por ${recurso.profiles?.full_name || 'Usuario Anónimo'}</span>
+                                        <span>${formatDate(recurso.created_at)}</span>
+                                    </div>
+                                    ${recurso.professors ? `<p class="text-xs text-white/50 mt-1">Catedrático: ${recurso.professors.name}</p>` : ''}
+                                </div>
+                            </div>
+
+                            <!-- Status y acciones -->
+                            <div class="flex items-center gap-4">
+                                <span class="status-badge status-${recurso.status}">${recurso.status}</span>
+                                
+                                <div class="flex items-center gap-2">
+                                    <div class="flex items-center gap-1 text-sm">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-emerald-400">
+                                            <path d="M7 10l5-5 5 5M12 5v14"></path>
+                                        </svg>
+                                        <span class="text-white/60">${recurso.votos_positivos}</span>
+                                    </div>
+                                    <div class="flex items-center gap-1 text-sm">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-rose-400">
+                                            <path d="M17 14l-5 5-5-5M12 19V5"></path>
+                                        </svg>
+                                        <span class="text-white/60">${recurso.votos_negativos}</span>
+                                    </div>
+                                </div>
+
+                                <div class="flex gap-2">
+                                    ${recurso.status === 'pendiente' ? `
+                                        <button onclick="approveResource(${recurso.id})" class="bg-emerald-600 hover:bg-emerald-700 transition-colors text-white px-3 py-1 rounded text-sm flex items-center gap-1">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <polyline points="20,6 9,17 4,12"></polyline>
+                                            </svg>
+                                            Aprobar
+                                        </button>
+                                        <button onclick="rejectResource(${recurso.id})" class="bg-rose-600 hover:bg-rose-700 transition-colors text-white px-3 py-1 rounded text-sm flex items-center gap-1">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                                            </svg>
+                                            Rechazar
+                                        </button>
+                                    ` : `
+                                        <button onclick="viewResource(${recurso.id})" class="bg-blue-600 hover:bg-blue-700 transition-colors text-white px-3 py-1 rounded text-sm flex items-center gap-1">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                                <circle cx="12" cy="12" r="3"></circle>
+                                            </svg>
+                                            Ver
+                                        </button>
+                                    `}
+                                    <button onclick="deleteResource(${recurso.id})" class="bg-gray-600 hover:bg-gray-700 transition-colors text-white px-3 py-1 rounded text-sm flex items-center gap-1">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <polyline points="3,6 5,6 21,6"></polyline>
+                                            <path d="M19,6v14a2,2,0,0,1-2,2H7a2,2,0,0,1-2-2V6m3,0V4a2,2,0,0,1,2-2h4a2,2,0,0,1,2,2V6"></path>
+                                        </svg>
+                                        Eliminar
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Funciones de utilidad
+        function getFileTypeClass(ext) {
+            if (ext === 'pdf') return 'file-type-pdf';
+            if (['doc', 'docx'].includes(ext)) return 'file-type-doc';
+            if (['ppt', 'pptx'].includes(ext)) return 'file-type-ppt';
+            if (['xls', 'xlsx'].includes(ext)) return 'file-type-xls';
+            return 'file-type-other';
+        }
+
+        function getFileTypeIcon(ext) {
+            if (ext === 'pdf') return 'PDF';
+            if (['doc', 'docx'].includes(ext)) return 'DOC';
+            if (['ppt', 'pptx'].includes(ext)) return 'PPT';
+            if (['xls', 'xlsx'].includes(ext)) return 'XLS';
+            return 'FILE';
+        }
+
+        function formatDate(dateString) {
+            return new Date(dateString).toLocaleDateString('es-ES', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `fixed bottom-4 right-4 px-4 py-2 rounded-lg shadow-lg backdrop-blur-lg transition-all duration-300 z-50 ${
+                type === 'success' ? 'bg-green-500/80 text-white' :
+                type === 'error' ? 'bg-rose-500/80 text-white' :
+                'bg-blue-500/80 text-white'
+            }`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.remove();
+            }, 3000);
+        }
+
+        // Funciones de moderación
+        window.approveResource = (id) => {
+            showConfirmationModal(
+                'Aprobar Recurso',
+                '¿Estás seguro de que quieres aprobar este recurso?',
+                'El recurso será visible para todos los usuarios.',
+                'Aprobar',
+                'bg-emerald-600 hover:bg-emerald-700',
+                () => updateResourceStatusLocal(id, 'aprobado')
+            );
+        };
+
+        window.rejectResource = (id) => {
+            showConfirmationModal(
+                'Rechazar Recurso',
+                '¿Estás seguro de que quieres rechazar este recurso?',
+                'El recurso será marcado como rechazado y no será visible.',
+                'Rechazar',
+                'bg-rose-600 hover:bg-rose-700',
+                () => updateResourceStatusLocal(id, 'rechazado')
+            );
+        };
+
+        window.deleteResource = (id) => {
+            showConfirmationModal(
+                'Eliminar Recurso',
+                '¿Estás seguro de que quieres eliminar este recurso?',
+                'Esta acción no se puede deshacer.',
+                'Eliminar',
+                'bg-red-600 hover:bg-red-700',
+                () => deleteResourcePermanentlyLocal(id)
+            );
+        };
+
+        window.viewResource = (id) => {
+            const recurso = allRecursos.find(r => r.id === id);
+            if (recurso) {
+                // Aquí podrías abrir un modal con más detalles o descargar el archivo
+                showToast(`Viendo recurso: ${recurso.nombre_archivo}`, 'info');
+            }
+        };
+
+        // Actualizar status de recurso
+        async function updateResourceStatusLocal(id, newStatus) {
+            try {
+                await updateResourceStatus(id, newStatus);
+                showToast(`Recurso ${newStatus} exitosamente`, 'success');
+                await loadAllRecursos(); // Recargar datos
+
+            } catch (error) {
+                console.error('Error actualizando recurso:', error);
+                showToast('Error al actualizar el recurso', 'error');
+            }
+        }
+
+        // Eliminar recurso permanentemente
+        async function deleteResourcePermanentlyLocal(id) {
+            try {
+                await deleteResourcePermanently(id);
+                showToast('Recurso eliminado exitosamente', 'success');
+                await loadAllRecursos(); // Recargar datos
+
+            } catch (error) {
+                console.error('Error eliminando recurso:', error);
+                showToast('Error al eliminar el recurso', 'error');
+            }
+        }
+
+        // Modal de confirmación
+        function showConfirmationModal(title, subtitle, message, confirmText, confirmClass, onConfirm) {
+            const modal = document.getElementById('confirmation-modal');
+            const modalIcon = document.getElementById('modal-icon');
+            const modalTitle = document.getElementById('modal-title');
+            const modalSubtitle = document.getElementById('modal-subtitle');
+            const modalMessage = document.getElementById('modal-message');
+            const modalConfirm = document.getElementById('modal-confirm');
+
+            modalTitle.textContent = title;
+            modalSubtitle.textContent = subtitle;
+            modalMessage.textContent = message;
+            modalConfirm.textContent = confirmText;
+            modalConfirm.className = `flex-1 py-2 px-4 rounded-lg font-medium transition-colors text-white ${confirmClass}`;
+
+            // Icono según la acción
+            if (title.includes('Aprobar')) {
+                modalIcon.className = 'w-12 h-12 bg-emerald-500/20 rounded-lg flex items-center justify-center';
+                modalIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-emerald-400"><polyline points="20,6 9,17 4,12"></polyline></svg>';
+            } else if (title.includes('Rechazar')) {
+                modalIcon.className = 'w-12 h-12 bg-rose-500/20 rounded-lg flex items-center justify-center';
+                modalIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-rose-400"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>';
+            } else {
+                modalIcon.className = 'w-12 h-12 bg-red-500/20 rounded-lg flex items-center justify-center';
+                modalIcon.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-red-400"><polyline points="3,6 5,6 21,6"></polyline><path d="M19,6v14a2,2,0,0,1-2,2H7a2,2,0,0,1-2-2V6m3,0V4a2,2,0,0,1,2-2h4a2,2,0,0,1,2,2V6"></path></svg>';
+            }
+
+            modal.classList.remove('hidden');
+
+            // Event listeners del modal
+            modalConfirm.onclick = () => {
+                modal.classList.add('hidden');
+                onConfirm();
+            };
+        }
+
+        // Event listeners
+        document.getElementById('modal-cancel').addEventListener('click', () => {
+            document.getElementById('confirmation-modal').classList.add('hidden');
+        });
+
+        // Filtros
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                // Actualizar botones activos
+                document.querySelectorAll('.filter-btn').forEach(b => {
+                    b.classList.remove('active', 'bg-white/20', 'border-white/30');
+                    b.classList.add('bg-white/10', 'text-white/70', 'border-white/20');
+                });
+                btn.classList.add('active', 'bg-white/20', 'text-white', 'border-white/30');
+                btn.classList.remove('bg-white/10', 'text-white/70', 'border-white/20');
+
+                // Filtrar recursos
+                currentFilter = btn.dataset.status;
+                applyFilters();
+            });
+        });
+
+        // Búsqueda
+        document.getElementById('search-input').addEventListener('input', (e) => {
+            applyFilters();
+        });
+
+        // Refresh
+        document.getElementById('refresh-btn').addEventListener('click', () => {
+            loadAllRecursos();
+        });
+
+        // Aplicar filtros
+        function applyFilters() {
+            const searchTerm = document.getElementById('search-input').value.toLowerCase();
+            
+            filteredRecursos = allRecursos.filter(recurso => {
+                const matchesStatus = currentFilter === 'all' || recurso.status === currentFilter;
+                const matchesSearch = recurso.nombre_archivo.toLowerCase().includes(searchTerm) ||
+                                    recurso.tipo_recurso.toLowerCase().includes(searchTerm) ||
+                                    (recurso.professors?.name || '').toLowerCase().includes(searchTerm);
+                
+                return matchesStatus && matchesSearch;
+            });
+
+            renderRecursos();
+        }
+
+        // Inicialización
+        checkAdminAuth().then(isAdmin => {
+            if (isAdmin) {
+                loadAllRecursos();
+            }
+        });
+    </script>
+</body>
+</html>
