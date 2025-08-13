@@ -100,16 +100,64 @@
             <h2 class="text-xl font-semibold text-white mb-4">
                 <i class="fas fa-user-plus mr-2"></i>Agregar Nuevo Administrador
             </h2>
+            
+            <!-- Información importante -->
+            <div class="bg-blue-500 bg-opacity-20 border border-blue-500 border-opacity-30 rounded-lg p-4 mb-6">
+                <div class="flex items-start">
+                    <i class="fas fa-info-circle text-blue-400 text-lg mr-3 mt-0.5"></i>
+                    <div class="text-white text-sm">
+                        <p class="font-medium mb-1">Importante:</p>
+                        <p>El usuario debe estar registrado en la aplicación antes de poder ser agregado como administrador. Si el email no existe, pídale que se registre primero en <a href="login.html" class="text-blue-300 hover:text-blue-200 underline">la página de login</a>.</p>
+                    </div>
+                </div>
+            </div>
+            
             <form id="addAdminForm" class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                    <label for="adminEmail" class="block text-white text-sm font-medium mb-2">Email del Usuario</label>
-                    <input 
-                        type="email" 
-                        id="adminEmail" 
-                        required 
-                        class="w-full px-3 py-2 bg-white bg-opacity-10 border border-white border-opacity-30 rounded-md text-white placeholder-white placeholder-opacity-60 focus:outline-none focus:ring-2 focus:ring-white focus:border-transparent"
-                        placeholder="usuario@ejemplo.com"
-                    >
+                <div class="relative">
+                    <label for="adminEmail" class="block text-white text-sm font-medium mb-2">Seleccionar Usuario</label>
+                    
+                    <!-- Campo de búsqueda -->
+                    <div class="relative">
+                        <input 
+                            type="text" 
+                            id="adminEmailSearch" 
+                            placeholder="Buscar usuario..."
+                            class="w-full px-3 py-2 pr-10 bg-white bg-opacity-10 border border-white border-opacity-30 rounded-md text-white placeholder-white placeholder-opacity-60 focus:outline-none focus:ring-2 focus:ring-white focus:border-transparent"
+                            autocomplete="off"
+                        >
+                        <div class="absolute inset-y-0 right-0 flex items-center pr-3">
+                            <i class="fas fa-search text-white text-opacity-60"></i>
+                        </div>
+                    </div>
+                    
+                    <!-- Dropdown de resultados -->
+                    <div id="userDropdown" class="absolute z-10 w-full mt-1 bg-white rounded-md shadow-lg border border-gray-200 hidden max-h-60 overflow-y-auto">
+                        <div id="loadingUsers" class="p-3 text-center text-gray-500">
+                            <i class="fas fa-spinner fa-spin mr-2"></i>Cargando usuarios...
+                        </div>
+                        <div id="userList" class="hidden">
+                            <!-- Los usuarios se cargarán aquí -->
+                        </div>
+                        <div id="noUsersFound" class="p-3 text-center text-gray-500 hidden">
+                            <i class="fas fa-search mr-2"></i>No se encontraron usuarios
+                        </div>
+                    </div>
+                    
+                    <!-- Campo oculto para el email seleccionado -->
+                    <input type="hidden" id="selectedUserEmail" name="adminEmail" required>
+                    
+                    <!-- Mostrar usuario seleccionado -->
+                    <div id="selectedUserDisplay" class="mt-2 hidden">
+                        <div class="bg-green-500 bg-opacity-20 border border-green-500 border-opacity-30 rounded-md p-2 flex items-center justify-between">
+                            <div class="flex items-center">
+                                <i class="fas fa-user text-green-400 mr-2"></i>
+                                <span id="selectedUserText" class="text-white text-sm"></span>
+                            </div>
+                            <button type="button" id="clearUserSelection" class="text-green-400 hover:text-green-300 focus:outline-none">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    </div>
                 </div>
                 <div>
                     <label for="adminRole" class="block text-white text-sm font-medium mb-2">Rol</label>
@@ -316,7 +364,7 @@
                         emptyElement.innerHTML = `
                             <i class="fas fa-user-slash text-white text-opacity-60 text-4xl mb-4"></i>
                             <p class="text-white text-opacity-80 mb-4">No hay administradores registrados</p>
-                            <p class="text-white text-opacity-60 text-sm">Ejecuta el archivo SQL setup para crear la tabla admin_users</p>
+                            <p class="text-white text-opacity-60 text-sm">Ingresa el primer admin</p>
                         `;
                         emptyElement.classList.remove('hidden');
                     }
@@ -435,14 +483,54 @@
                 return;
             }
 
+            // Validar formato de email
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                showMessage('Por favor ingresa un email con formato válido', 'error');
+                return;
+            }
+
             try {
+                console.log('📝 Intentando agregar administrador:', email, role);
+                
+                // Mostrar loading en el botón
+                const submitButton = event.target.querySelector('button[type="submit"]');
+                const originalText = submitButton.innerHTML;
+                submitButton.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Agregando...';
+                submitButton.disabled = true;
+
                 await addAdmin(email, role);
-                showMessage('Administrador agregado exitosamente', 'success');
+                
+                showMessage('✅ Administrador agregado exitosamente', 'success');
                 document.getElementById('addAdminForm').reset();
                 await loadAdmins();
+                
+                // Restaurar botón
+                submitButton.innerHTML = originalText;
+                submitButton.disabled = false;
+                
             } catch (error) {
-                console.error('Error adding admin:', error);
-                showMessage(error.message || 'Error al agregar administrador', 'error');
+                console.error('❌ Error adding admin:', error);
+                
+                // Restaurar botón
+                const submitButton = event.target.querySelector('button[type="submit"]');
+                submitButton.innerHTML = '<i class="fas fa-plus mr-2"></i>Agregar';
+                submitButton.disabled = false;
+                
+                // Mostrar mensaje de error específico
+                let errorMessage = 'Error al agregar administrador';
+                
+                if (error.message.includes('no existe en el sistema')) {
+                    errorMessage = `❌ ${error.message}`;
+                } else if (error.message.includes('ya es administrador')) {
+                    errorMessage = `⚠️ ${error.message}`;
+                } else if (error.message.includes('no tienes permisos')) {
+                    errorMessage = `🚫 ${error.message}`;
+                } else {
+                    errorMessage = `❌ ${error.message}`;
+                }
+                
+                showMessage(errorMessage, 'error');
             }
         }
 

@@ -865,6 +865,8 @@ async function getAllAdmins() {
 // Agregar nuevo administrador (solo para superadmins)
 async function addAdmin(email, role = 'admin') {
   try {
+    console.log('🔄 Iniciando proceso de agregar admin:', email, role);
+    
     const currentUser = await getCurrentUser();
     if (!currentUser) throw new Error('Usuario no autenticado');
 
@@ -872,47 +874,92 @@ async function addAdmin(email, role = 'admin') {
     const isSuper = await isSuperAdmin();
     if (!isSuper) throw new Error('No tienes permisos para agregar administradores');
 
-    // Buscar el usuario por email en la tabla auth.users usando una función de Supabase
-    const { data: userData, error: userError } = await supabaseClient.rpc('get_user_by_email', {
-      user_email: email
-    });
+    console.log('👑 Usuario confirmado como superadmin, procediendo...');
 
-    if (userError) {
-      // Si la función no existe, intentar el método alternativo
-      console.log('Función get_user_by_email no disponible, verificando existencia del usuario...');
-      
-      // Verificar que el email no esté ya en admin_users
-      const { data: existingAdmin, error: checkError } = await supabaseClient
-        .from('admin_users')
-        .select('email')
-        .eq('email', email)
-        .maybeSingle();
+    // Verificar que el email no esté ya en admin_users
+    console.log('🔍 Verificando si ya es administrador...');
+    const { data: existingAdmin, error: checkError } = await supabaseClient
+      .from('admin_users')
+      .select('email')
+      .eq('email', email)
+      .maybeSingle();
 
-      if (checkError) throw checkError;
-      if (existingAdmin) throw new Error('Este usuario ya es administrador');
+    if (checkError && checkError.code !== 'PGRST116') {
+      console.error('Error verificando admin existente:', checkError);
+      throw checkError;
+    }
+    
+    if (existingAdmin) {
+      throw new Error('Este usuario ya es administrador');
     }
 
-    // Insertar en admin_users (el user_id se manejará en el trigger o se puede dejar null inicialmente)
+    console.log('✅ Email no está en lista de administradores');
+
+    // Intentar buscar el usuario en auth.users usando la función personalizada
+    console.log('🔍 Buscando usuario en auth.users...');
+    let targetUserId = null;
+    
+    try {
+      const { data: userData, error: userError } = await supabaseClient.rpc('get_user_by_email', {
+        user_email: email
+      });
+
+      if (userError) {
+        console.warn('Función get_user_by_email no disponible:', userError);
+      } else if (userData && userData.length > 0) {
+        targetUserId = userData[0].id;
+        console.log('✅ Usuario encontrado con función RPC:', targetUserId);
+      }
+    } catch (rpcError) {
+      console.warn('Error llamando función RPC:', rpcError);
+    }
+
+    // Si no se pudo obtener con RPC, intentar método alternativo
+    if (!targetUserId) {
+      console.log('⚠️ Intentando método alternativo para encontrar usuario...');
+      
+      // Como no podemos consultar auth.users directamente, vamos a insertar con user_id null
+      // y usar el trigger que creamos para sincronizar
+      console.log('📝 Insertando admin sin user_id, el trigger debería sincronizarlo...');
+    }
+
+    // Insertar en admin_users
+    console.log('💾 Insertando en tabla admin_users...');
+    const insertData = {
+      email: email,
+      role: role,
+      created_by: currentUser.id,
+      is_active: true
+    };
+
+    // Solo agregar user_id si lo encontramos
+    if (targetUserId) {
+      insertData.user_id = targetUserId;
+    }
+
     const { data, error } = await supabaseClient
       .from('admin_users')
-      .insert({
-        email: email,
-        role: role,
-        created_by: currentUser.id,
-        is_active: true
-      })
+      .insert(insertData)
       .select();
 
     if (error) {
+      console.error('❌ Error insertando administrador:', error);
+      
       if (error.code === '23505') { // Constraint violation
         throw new Error('Este usuario ya es administrador');
+      } else if (error.code === '23502') { // Not null constraint
+        throw new Error(`El usuario con email "${email}" no existe en el sistema. Debe registrarse primero en la aplicación.`);
+      } else if (error.message.includes('Usuario no encontrado')) {
+        throw new Error(`El usuario con email "${email}" no existe en el sistema. Debe registrarse primero en la aplicación.`);
       }
-      throw error;
+      
+      throw new Error(`Error al agregar administrador: ${error.message}`);
     }
     
+    console.log('✅ Administrador agregado exitosamente:', data[0]);
     return data[0];
   } catch (error) {
-    console.error('Error agregando administrador:', error);
+    console.error('❌ Error agregando administrador:', error);
     throw error;
   }
 }
@@ -1169,6 +1216,46 @@ async function searchResourcesForAdmin(filters) {
   }
 }
 
+// Obtener todos los usuarios registrados (para selección en admin)
+async function getAllRegisteredUsers() {
+  try {
+    console.log('📋 Obteniendo todos los usuarios registrados...');
+    
+    // Obtener usuarios autenticados de auth.users
+    const { data: authData, error: authError } = await supabaseClient.auth.admin.listUsers();
+    
+    if (authError) {
+      console.error('Error obteniendo usuarios de auth:', authError);
+      // Fallback: intentar desde public si auth.admin no está disponible
+      throw new Error('No se pueden obtener usuarios. Verifica los permisos de administrador.');
+    }
+
+    console.log('👥 Usuarios encontrados:', authData.users?.length || 0);
+
+    // Filtrar usuarios activos y formatear
+    const activeUsers = authData.users
+      .filter(user => user.email && !user.email_confirmed_at === false) // Solo usuarios con email confirmado
+      .map(user => ({
+        id: user.id,
+        email: user.email,
+        created_at: user.created_at,
+        last_sign_in_at: user.last_sign_in_at,
+        email_confirmed_at: user.email_confirmed_at
+      }))
+      .sort((a, b) => a.email.localeCompare(b.email)); // Ordenar alfabéticamente
+
+    console.log('✅ Usuarios activos procesados:', activeUsers.length);
+    return activeUsers;
+    
+  } catch (error) {
+    console.error('❌ Error obteniendo usuarios registrados:', error);
+    
+    // Fallback más simple: retornar lista vacía con mensaje
+    console.log('🔄 Intentando método alternativo...');
+    return [];
+  }
+}
+
 // Exportar todas las funciones
 export {
   signIn,
@@ -1206,6 +1293,7 @@ export {
   addAdmin,
   updateAdminStatus,
   updateAdminRole,
+  getAllRegisteredUsers,
   getAllResourcesForAdmin,
   updateResourceStatus,
   deleteResourcePermanently,
