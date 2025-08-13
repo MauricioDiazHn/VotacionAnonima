@@ -65,8 +65,9 @@
 
         #userDropdown {
             max-height: 240px;
-            z-index: 1000;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+            z-index: 9999;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3), 0 0 0 1px rgba(0,0,0,0.1);
+            border: 2px solid rgba(255,255,255,0.8);
         }
 
         #userDropdown::-webkit-scrollbar {
@@ -170,7 +171,7 @@
                     </div>
                     
                     <!-- Dropdown de sugerencias -->
-                    <div id="userDropdown" class="absolute z-10 w-full mt-1 bg-white rounded-md shadow-lg border border-gray-200 hidden max-h-60 overflow-y-auto">
+                    <div id="userDropdown" class="absolute z-50 w-full mt-1 bg-white rounded-md shadow-lg border border-gray-200 hidden max-h-60 overflow-y-auto" style="background-color: rgba(255,255,255,0.98); backdrop-filter: blur(10px);">
                         <div id="loadingUsers" class="p-3 text-center text-gray-500">
                             <i class="fas fa-spinner fa-spin mr-2"></i>Cargando sugerencias...
                         </div>
