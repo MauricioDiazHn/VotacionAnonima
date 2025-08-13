@@ -563,6 +563,135 @@ async function syncAllProfessorRatings() {
   console.log('Sincronización completada para todos los profesores');
 }
 
+// ==== MANEJO DE RECURSOS PRO ====
+
+// Obtener recursos de un profesor específico
+async function getProfessorResources(professorId) {
+  const { data, error } = await supabaseClient
+    .from('recursos')
+    .select(`
+      *,
+      professors(name)
+    `)
+    .eq('id_catedratico', professorId)
+    .eq('status', 'aprobado')
+    .order('created_at', { ascending: false });
+  
+  if (error) throw error;
+  
+  // Calcular rating promedio basado en votos
+  const resourcesWithRatings = data.map(resource => {
+    const totalVotes = resource.votos_positivos + resource.votos_negativos;
+    if (totalVotes > 0) {
+      const positiveRatio = resource.votos_positivos / totalVotes;
+      resource.average_rating = parseFloat((positiveRatio * 5).toFixed(1));
+    } else {
+      resource.average_rating = 0;
+    }
+    resource.rating_count = totalVotes;
+    return resource;
+  });
+  
+  return resourcesWithRatings;
+}
+
+// Verificar si el usuario tiene suscripción PRO
+async function hasProSubscription() {
+  const user = await getCurrentUser();
+  if (!user) return false;
+
+  const { data, error } = await supabaseClient
+    .from('profiles')
+    .select('es_pro')
+    .eq('id', user.id)
+    .maybeSingle();
+    
+  if (error) {
+    console.error('Error verificando suscripción:', error);
+    return false;
+  }
+  
+  return data?.es_pro || false;
+}
+
+// Subir un nuevo recurso
+async function uploadResource(professorId, file, resourceType, academicPeriod) {
+  const user = await getCurrentUser();
+  if (!user) throw new Error('Usuario no autenticado');
+
+  // Simular subida de archivo (en producción usarías Supabase Storage)
+  const fileName = `${Date.now()}_${file.name}`;
+  const pathStorage = `recursos-pro/${fileName}`; // Path para el bucket
+  
+  const { data, error } = await supabaseClient
+    .from('recursos')
+    .insert({
+      id_catedratico: professorId,
+      id_usuario_que_subio: user.id,
+      nombre_archivo: file.name,
+      path_storage: pathStorage,
+      tipo_recurso: resourceType,
+      periodo_academico: academicPeriod,
+      status: 'pendiente' // Requiere aprobación
+    })
+    .select();
+    
+  if (error) throw error;
+  return data[0];
+}
+
+// Calificar un recurso con voto positivo/negativo (solo usuarios PRO)
+async function rateResource(resourceId, isPositive) {
+  const user = await getCurrentUser();
+  if (!user) throw new Error('Usuario no autenticado');
+  
+  const isPro = await hasProSubscription();
+  if (!isPro) throw new Error('Requiere suscripción PRO');
+
+  // Incrementar voto correspondiente
+  const columnToIncrement = isPositive ? 'votos_positivos' : 'votos_negativos';
+  
+  const { data, error } = await supabaseClient
+    .rpc('incrementar_voto', {
+      recurso_id: resourceId,
+      columna: columnToIncrement
+    });
+    
+  if (error) throw error;
+  return data;
+}
+
+// Obtener estadísticas del usuario (puntos basados en recursos aprobados)
+async function getUserStats() {
+  const user = await getCurrentUser();
+  if (!user) return { points: 0, uploaded_resources: 0, approved_resources: 0 };
+
+  const { data, error } = await supabaseClient
+    .from('recursos')
+    .select('status')
+    .eq('id_usuario_que_subio', user.id);
+    
+  if (error) {
+    console.error('Error obteniendo estadísticas:', error);
+    return { points: 0, uploaded_resources: 0, approved_resources: 0 };
+  }
+  
+  const uploaded_resources = data.length;
+  const approved_resources = data.filter(r => r.status === 'aprobado').length;
+  const points = approved_resources * 100; // 100 puntos por recurso aprobado
+  
+  return { points, uploaded_resources, approved_resources };
+}
+
+// Obtener top contribuidores del mes
+async function getTopContributors(limit = 10) {
+  const { data, error } = await supabaseClient
+    .rpc('get_top_contributors', { limite: limit });
+    
+  if (error) throw error;
+  return data;
+}
+
 // Exportar todas las funciones
 export {
   signIn,
@@ -585,5 +714,11 @@ export {
   getUserLikesForComments,
   addProfessor,
   syncAllProfessorRatings,
-  getRandomUnevaluatedProfessor
+  getRandomUnevaluatedProfessor,
+  getProfessorResources,
+  hasProSubscription,
+  uploadResource,
+  rateResource,
+  getUserStats,
+  getTopContributors
 };
