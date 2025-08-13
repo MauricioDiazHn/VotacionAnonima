@@ -53,6 +53,39 @@
         .status-inactive {
             color: #ef4444;
         }
+
+        /* User dropdown styles */
+        .user-item {
+            transition: background-color 0.2s ease;
+        }
+
+        .user-item:hover {
+            background-color: #f3f4f6 !important;
+        }
+
+        #userDropdown {
+            max-height: 240px;
+            z-index: 1000;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+        }
+
+        #userDropdown::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        #userDropdown::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 3px;
+        }
+
+        #userDropdown::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 3px;
+        }
+
+        #userDropdown::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
     </style>
 </head>
 <body class="gradient-bg min-h-screen">
@@ -106,56 +139,50 @@
                 <div class="flex items-start">
                     <i class="fas fa-info-circle text-blue-400 text-lg mr-3 mt-0.5"></i>
                     <div class="text-white text-sm">
-                        <p class="font-medium mb-1">Importante:</p>
-                        <p>El usuario debe estar registrado en la aplicación antes de poder ser agregado como administrador. Si el email no existe, pídale que se registre primero en <a href="login.html" class="text-blue-300 hover:text-blue-200 underline">la página de login</a>.</p>
+                        <p class="font-medium mb-1">Cómo agregar administradores:</p>
+                        <ul class="list-disc list-inside space-y-1 text-white text-opacity-90">
+                            <li>Escribe o busca el email del usuario en el campo</li>
+                            <li>Si aparecen sugerencias, puedes hacer clic para seleccionar</li>
+                            <li>También puedes escribir cualquier email directamente</li>
+                            <li>El sistema verificará que el usuario esté registrado al agregarlo</li>
+                        </ul>
                     </div>
                 </div>
             </div>
             
             <form id="addAdminForm" class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div class="relative">
-                    <label for="adminEmail" class="block text-white text-sm font-medium mb-2">Seleccionar Usuario</label>
+                    <label for="adminEmail" class="block text-white text-sm font-medium mb-2">Email del Usuario</label>
                     
-                    <!-- Campo de búsqueda -->
+                    <!-- Campo de búsqueda/entrada -->
                     <div class="relative">
                         <input 
-                            type="text" 
+                            type="email" 
                             id="adminEmailSearch" 
-                            placeholder="Buscar usuario..."
+                            placeholder="Buscar o escribir email..."
                             class="w-full px-3 py-2 pr-10 bg-white bg-opacity-10 border border-white border-opacity-30 rounded-md text-white placeholder-white placeholder-opacity-60 focus:outline-none focus:ring-2 focus:ring-white focus:border-transparent"
                             autocomplete="off"
+                            required
                         >
                         <div class="absolute inset-y-0 right-0 flex items-center pr-3">
                             <i class="fas fa-search text-white text-opacity-60"></i>
                         </div>
                     </div>
                     
-                    <!-- Dropdown de resultados -->
+                    <!-- Dropdown de sugerencias -->
                     <div id="userDropdown" class="absolute z-10 w-full mt-1 bg-white rounded-md shadow-lg border border-gray-200 hidden max-h-60 overflow-y-auto">
                         <div id="loadingUsers" class="p-3 text-center text-gray-500">
-                            <i class="fas fa-spinner fa-spin mr-2"></i>Cargando usuarios...
+                            <i class="fas fa-spinner fa-spin mr-2"></i>Cargando sugerencias...
                         </div>
                         <div id="userList" class="hidden">
-                            <!-- Los usuarios se cargarán aquí -->
+                            <!-- Las sugerencias se cargarán aquí -->
                         </div>
                         <div id="noUsersFound" class="p-3 text-center text-gray-500 hidden">
-                            <i class="fas fa-search mr-2"></i>No se encontraron usuarios
+                            <i class="fas fa-info-circle mr-2"></i>Escribe el email completo si no aparece en las sugerencias
                         </div>
-                    </div>
-                    
-                    <!-- Campo oculto para el email seleccionado -->
-                    <input type="hidden" id="selectedUserEmail" name="adminEmail" required>
-                    
-                    <!-- Mostrar usuario seleccionado -->
-                    <div id="selectedUserDisplay" class="mt-2 hidden">
-                        <div class="bg-green-500 bg-opacity-20 border border-green-500 border-opacity-30 rounded-md p-2 flex items-center justify-between">
-                            <div class="flex items-center">
-                                <i class="fas fa-user text-green-400 mr-2"></i>
-                                <span id="selectedUserText" class="text-white text-sm"></span>
-                            </div>
-                            <button type="button" id="clearUserSelection" class="text-green-400 hover:text-green-300 focus:outline-none">
-                                <i class="fas fa-times"></i>
-                            </button>
+                        <div id="customEmailHint" class="p-3 bg-blue-50 border-t border-blue-200 text-blue-700 text-sm hidden">
+                            <i class="fas fa-lightbulb mr-2"></i>
+                            <strong>Sugerencia:</strong> Puedes escribir cualquier email directamente. El sistema verificará si existe al agregarlo.
                         </div>
                     </div>
                 </div>
@@ -238,6 +265,7 @@
             isSuperAdmin,
             getAdminRole,
             getAllAdmins,
+            getAllRegisteredUsers,
             addAdmin,
             updateAdminStatus,
             updateAdminRole,
@@ -247,6 +275,8 @@
         // Variables globales
         let currentUserRole = 'user';
         let admins = [];
+        let allUsers = [];
+        let filteredUsers = [];
 
         // Función logout
         window.logout = async function() {
@@ -299,9 +329,12 @@
                     console.log('✅ Información de admin actualizada en UI');
                 }
 
-                // Load admins
+                // Load admins and users
                 console.log('📋 Cargando lista de administradores...');
                 await loadAdmins();
+                
+                console.log('👥 Cargando lista de usuarios...');
+                await loadUsers();
 
                 // Setup event listeners
                 console.log('🎯 Configurando event listeners...');
@@ -333,6 +366,28 @@
 
             // Add admin form
             document.getElementById('addAdminForm').addEventListener('submit', handleAddAdmin);
+
+            // User search functionality
+            const searchInput = document.getElementById('adminEmailSearch');
+            const dropdown = document.getElementById('userDropdown');
+
+            searchInput.addEventListener('input', handleUserSearch);
+            searchInput.addEventListener('focus', showUserDropdown);
+            searchInput.addEventListener('blur', function(e) {
+                // Delay hiding to allow click on dropdown items
+                setTimeout(() => {
+                    if (!dropdown.contains(document.activeElement)) {
+                        hideUserDropdown();
+                    }
+                }, 150);
+            });
+
+            // Close dropdown when clicking outside
+            document.addEventListener('click', function(event) {
+                if (!searchInput.contains(event.target) && !dropdown.contains(event.target)) {
+                    hideUserDropdown();
+                }
+            });
 
             // Modal buttons
             document.getElementById('cancelButton').addEventListener('click', hideModal);
@@ -396,6 +451,127 @@
                 if (loadingElement) loadingElement.classList.add('hidden');
             }
         }
+
+        // Load users for dropdown
+        async function loadUsers() {
+            try {
+                console.log('👥 Iniciando carga de usuarios...');
+                
+                console.log('🔄 Llamando a getAllRegisteredUsers()...');
+                allUsers = await getAllRegisteredUsers();
+                console.log('📊 Usuarios obtenidos:', allUsers.length);
+                
+                // Filtrar usuarios que ya son administradores
+                const adminEmails = admins.map(admin => admin.email);
+                filteredUsers = allUsers.filter(user => !adminEmails.includes(user.email));
+                
+                console.log('✅ Usuarios disponibles para ser admin:', filteredUsers.length);
+                
+            } catch (error) {
+                console.error('❌ Error loading users:', error);
+                allUsers = [];
+                filteredUsers = [];
+                showMessage('Error al cargar usuarios: ' + error.message, 'error');
+            }
+        }
+
+        // User search and dropdown functions
+        function handleUserSearch(event) {
+            const searchTerm = event.target.value.toLowerCase().trim();
+            
+            if (!searchTerm) {
+                hideUserDropdown();
+                return;
+            }
+
+            if (searchTerm.length < 2) {
+                return; // No buscar hasta tener al menos 2 caracteres
+            }
+
+            // Buscar en usuarios conocidos
+            const filtered = filteredUsers.filter(user => 
+                user.email.toLowerCase().includes(searchTerm)
+            );
+            
+            renderUserList(filtered, searchTerm);
+            showUserDropdown();
+        }
+
+        function renderUserList(users, searchTerm = '') {
+            const userList = document.getElementById('userList');
+            const noUsersFound = document.getElementById('noUsersFound');
+            const customEmailHint = document.getElementById('customEmailHint');
+            const loadingUsers = document.getElementById('loadingUsers');
+            
+            // Hide loading
+            loadingUsers.classList.add('hidden');
+            
+            if (users.length === 0) {
+                userList.classList.add('hidden');
+                noUsersFound.classList.remove('hidden');
+                
+                // Mostrar hint si parece un email válido
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                if (emailRegex.test(searchTerm)) {
+                    customEmailHint.classList.remove('hidden');
+                } else {
+                    customEmailHint.classList.add('hidden');
+                }
+                return;
+            }
+
+            noUsersFound.classList.add('hidden');
+            customEmailHint.classList.add('hidden');
+            userList.classList.remove('hidden');
+            
+            userList.innerHTML = users.map(user => `
+                <div class="user-item p-3 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0" 
+                     onclick="selectUser('${user.email}')">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <div class="font-medium text-gray-900">${user.email}</div>
+                            <div class="text-sm text-gray-500">
+                                <i class="fas fa-calendar mr-1"></i>
+                                Registrado: ${new Date(user.created_at).toLocaleDateString()}
+                            </div>
+                        </div>
+                        <div class="text-sm text-blue-600">
+                            <i class="fas fa-mouse-pointer"></i>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function showUserDropdown() {
+            const dropdown = document.getElementById('userDropdown');
+            const loadingUsers = document.getElementById('loadingUsers');
+            
+            if (filteredUsers.length === 0 && allUsers.length === 0) {
+                loadingUsers.classList.remove('hidden');
+            } else {
+                loadingUsers.classList.add('hidden');
+            }
+            
+            dropdown.classList.remove('hidden');
+        }
+
+        function hideUserDropdown() {
+            document.getElementById('userDropdown').classList.add('hidden');
+        }
+
+        function selectUser(email) {
+            // Update search input with selected email
+            document.getElementById('adminEmailSearch').value = email;
+            
+            // Hide dropdown
+            hideUserDropdown();
+            
+            console.log('✅ Usuario seleccionado:', email);
+        }
+
+        // Make selectUser available globally
+        window.selectUser = selectUser;
 
         // Render admins
         function renderAdmins() {
@@ -475,7 +651,7 @@
         async function handleAddAdmin(event) {
             event.preventDefault();
             
-            const email = document.getElementById('adminEmail').value.trim();
+            const email = document.getElementById('adminEmailSearch').value.trim();
             const role = document.getElementById('adminRole').value;
 
             if (!email) {
@@ -502,8 +678,15 @@
                 await addAdmin(email, role);
                 
                 showMessage('✅ Administrador agregado exitosamente', 'success');
-                document.getElementById('addAdminForm').reset();
+                
+                // Reset form
+                document.getElementById('adminEmailSearch').value = '';
+                document.getElementById('adminRole').value = 'admin';
+                hideUserDropdown();
+                
+                // Reload data
                 await loadAdmins();
+                await loadUsers(); // Reload to update filtered list
                 
                 // Restaurar botón
                 submitButton.innerHTML = originalText;
