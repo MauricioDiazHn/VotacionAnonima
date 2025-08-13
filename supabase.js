@@ -701,7 +701,7 @@ async function isAdmin(userEmail) {
     'mauricio.diaz@admin.com',
     'admin@evalua-t.com',
     'tu-email@admin.com', // Cambia esto por tu email real
-    // Agregar más emails de admin aquí
+    'cotitohn35@gmail.com' // Agregar más emails de admin aquí
   ];
   
   return adminEmails.includes(userEmail);
