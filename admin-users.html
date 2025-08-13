@@ -182,24 +182,58 @@
     <!-- Success/Error Messages -->
     <div id="messageContainer" class="fixed top-4 right-4 z-50"></div>
 
-    <script src="supabase.js"></script>
-    <script>
+    <script type="module">
+        import { 
+            getCurrentUser,
+            isAuthenticated,
+            isAdmin,
+            isSuperAdmin,
+            getAdminRole,
+            getAllAdmins,
+            addAdmin,
+            updateAdminStatus,
+            updateAdminRole,
+            signOut
+        } from './supabase.js';
+
+        // Variables globales
         let currentUserRole = 'user';
         let admins = [];
+
+        // Función logout
+        window.logout = async function() {
+            try {
+                await signOut();
+                window.location.href = 'login.html';
+            } catch (error) {
+                console.error('Error cerrando sesión:', error);
+                showMessage('Error al cerrar sesión', 'error');
+            }
+        };
 
         // Initialize page
         document.addEventListener('DOMContentLoaded', async function() {
             try {
+                console.log('🚀 Inicializando página de administradores...');
+                
                 // Check authentication
+                console.log('🔍 Verificando autenticación...');
                 const user = await getCurrentUser();
+                console.log('👤 Usuario obtenido:', user?.email);
+                
                 if (!user) {
+                    console.log('❌ Usuario no autenticado, redirigiendo');
                     window.location.href = 'login.html';
                     return;
                 }
 
                 // Check if user is superadmin
+                console.log('👑 Verificando si es superadmin...');
                 const isSuperAdminUser = await isSuperAdmin();
+                console.log('🔑 Es superadmin:', isSuperAdminUser);
+                
                 if (!isSuperAdminUser) {
+                    console.log('❌ Usuario no es superadmin');
                     showMessage('No tienes permisos para acceder a esta página', 'error');
                     setTimeout(() => {
                         window.location.href = 'admin.html';
@@ -207,17 +241,28 @@
                     return;
                 }
 
+                console.log('📊 Obteniendo rol del usuario...');
                 currentUserRole = await getAdminRole();
-                document.getElementById('adminInfo').textContent = `${user.email} (${currentUserRole})`;
+                console.log('🎭 Rol obtenido:', currentUserRole);
+                
+                const adminInfoElement = document.getElementById('adminInfo');
+                if (adminInfoElement) {
+                    adminInfoElement.textContent = `${user.email} (${currentUserRole})`;
+                    console.log('✅ Información de admin actualizada en UI');
+                }
 
                 // Load admins
+                console.log('📋 Cargando lista de administradores...');
                 await loadAdmins();
 
                 // Setup event listeners
+                console.log('🎯 Configurando event listeners...');
                 setupEventListeners();
+                
+                console.log('🎉 Inicialización completada exitosamente');
             } catch (error) {
-                console.error('Error initializing page:', error);
-                showMessage('Error al cargar la página', 'error');
+                console.error('❌ Error initializing page:', error);
+                showMessage('Error al cargar la página: ' + error.message, 'error');
             }
         });
 
@@ -249,24 +294,58 @@
         // Load admins
         async function loadAdmins() {
             try {
-                document.getElementById('loadingAdmins').classList.remove('hidden');
-                document.getElementById('adminGrid').classList.add('hidden');
-                document.getElementById('emptyState').classList.add('hidden');
-
-                admins = await getAllAdmins();
+                console.log('📋 Iniciando carga de administradores...');
                 
+                // Mostrar loading state
+                const loadingElement = document.getElementById('loadingAdmins');
+                const gridElement = document.getElementById('adminGrid');
+                const emptyElement = document.getElementById('emptyState');
+                
+                if (loadingElement) loadingElement.classList.remove('hidden');
+                if (gridElement) gridElement.classList.add('hidden');
+                if (emptyElement) emptyElement.classList.add('hidden');
+
+                console.log('🔄 Llamando a getAllAdmins()...');
+                admins = await getAllAdmins();
+                console.log('📊 Administradores obtenidos:', admins.length, admins);
+                
+                // Si no hay administradores, mostrar mensaje explicativo
                 if (admins.length === 0) {
-                    document.getElementById('emptyState').classList.remove('hidden');
+                    console.log('📭 No hay administradores, mostrando estado vacío');
+                    if (emptyElement) {
+                        emptyElement.innerHTML = `
+                            <i class="fas fa-user-slash text-white text-opacity-60 text-4xl mb-4"></i>
+                            <p class="text-white text-opacity-80 mb-4">No hay administradores registrados</p>
+                            <p class="text-white text-opacity-60 text-sm">Ejecuta el archivo SQL setup para crear la tabla admin_users</p>
+                        `;
+                        emptyElement.classList.remove('hidden');
+                    }
                 } else {
+                    console.log('🎨 Renderizando administradores...');
                     renderAdmins();
-                    document.getElementById('adminGrid').classList.remove('hidden');
+                    if (gridElement) gridElement.classList.remove('hidden');
                 }
+                
+                console.log('✅ Carga de administradores completada');
             } catch (error) {
-                console.error('Error loading admins:', error);
-                showMessage('Error al cargar administradores', 'error');
-                document.getElementById('emptyState').classList.remove('hidden');
+                console.error('❌ Error loading admins:', error);
+                showMessage('Error al cargar administradores: ' + error.message, 'error');
+                
+                // Mostrar empty state con información de error
+                const emptyElement = document.getElementById('emptyState');
+                if (emptyElement) {
+                    emptyElement.innerHTML = `
+                        <i class="fas fa-exclamation-triangle text-white text-opacity-60 text-4xl mb-4"></i>
+                        <p class="text-white text-opacity-80 mb-4">Error al cargar administradores</p>
+                        <p class="text-white text-opacity-60 text-sm">${error.message}</p>
+                        <p class="text-white text-opacity-60 text-sm mt-2">Verifica que la tabla admin_users esté configurada</p>
+                    `;
+                    emptyElement.classList.remove('hidden');
+                }
             } finally {
-                document.getElementById('loadingAdmins').classList.add('hidden');
+                // Ocultar loading state
+                const loadingElement = document.getElementById('loadingAdmins');
+                if (loadingElement) loadingElement.classList.add('hidden');
             }
         }
 

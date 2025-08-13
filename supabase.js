@@ -829,6 +829,8 @@ async function getAdminRole(userEmail = null) {
 // Obtener todos los administradores (solo para superadmins)
 async function getAllAdmins() {
   try {
+    console.log('🔍 Consultando tabla admin_users...');
+    
     const { data, error } = await supabaseClient
       .from('admin_users')
       .select(`
@@ -837,11 +839,26 @@ async function getAllAdmins() {
       `)
       .order('created_at', { ascending: false });
 
-    if (error) throw error;
+    if (error) {
+      console.error('❌ Error en consulta admin_users:', error);
+      
+      // Si hay error de políticas RLS o tabla no existe, devolver array vacío
+      if (error.code === 'PGRST116' || error.message.includes('relation') || error.message.includes('policy')) {
+        console.warn('⚠️ Tabla admin_users no accesible, devolviendo lista vacía');
+        return [];
+      }
+      
+      throw error;
+    }
+    
+    console.log('✅ Administradores obtenidos exitosamente:', data?.length || 0);
     return data || [];
   } catch (error) {
-    console.error('Error obteniendo administradores:', error);
-    throw error;
+    console.error('❌ Error obteniendo administradores:', error);
+    
+    // En caso de error crítico, devolver lista vacía en lugar de fallar
+    console.warn('⚠️ Devolviendo lista vacía debido a error');
+    return [];
   }
 }
 
