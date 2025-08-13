@@ -696,15 +696,20 @@ async function getTopContributors(limit = 10) {
 
 // Verificar si el usuario es administrador
 async function isAdmin(userEmail) {
-  // Lista de emails de administradores - puedes modificar esto
-  const adminEmails = [
-    'mauricio.diaz@admin.com',
-    'admin@evalua-t.com',
-    'tu-email@admin.com', // Cambia esto por tu email real
-    'cotitohn35@gmail.com' // Agregar más emails de admin aquí
-  ];
-  
-  return adminEmails.includes(userEmail);
+  if (!userEmail) return false;
+
+  const { data, error } = await supabaseClient
+    .from('admins')
+    .select('email')
+    .eq('email', userEmail)
+    .maybeSingle();
+
+  if (error) {
+    console.error('Error checking admin status:', error);
+    return false;
+  }
+
+  return data !== null;
 }
 
 // Obtener todos los recursos para el admin
