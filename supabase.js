@@ -695,16 +695,197 @@ async function getTopContributors(limit = 10) {
 // === FUNCIONES ESPECÍFICAS DEL ADMIN ===
 
 // Verificar si el usuario es administrador
-async function isAdmin(userEmail) {
-  // Lista de emails de administradores - puedes modificar esto
-  const adminEmails = [
-    'mauricio.diaz@admin.com',
-    'admin@evalua-t.com',
-    'tu-email@admin.com', // Cambia esto por tu email real
-    'cotitohn35@gmail.com' // Agregar más emails de admin aquí
-  ];
-  
-  return adminEmails.includes(userEmail);
+async function isAdmin(userEmail = null) {
+  try {
+    // Si no se proporciona email, obtener el del usuario actual
+    if (!userEmail) {
+      const user = await getCurrentUser();
+      if (!user) return false;
+      userEmail = user.email;
+    }
+
+    // Consultar la tabla admin_users
+    const { data, error } = await supabaseClient
+      .from('admin_users')
+      .select('role, is_active')
+      .eq('email', userEmail)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error verificando admin:', error);
+      return false;
+    }
+
+    return data !== null;
+  } catch (error) {
+    console.error('Error en isAdmin:', error);
+    return false;
+  }
+}
+
+// Verificar si el usuario es superadministrador
+async function isSuperAdmin(userEmail = null) {
+  try {
+    // Si no se proporciona email, obtener el del usuario actual
+    if (!userEmail) {
+      const user = await getCurrentUser();
+      if (!user) return false;
+      userEmail = user.email;
+    }
+
+    // Consultar la tabla admin_users
+    const { data, error } = await supabaseClient
+      .from('admin_users')
+      .select('role, is_active')
+      .eq('email', userEmail)
+      .eq('role', 'superadmin')
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error verificando superadmin:', error);
+      return false;
+    }
+
+    return data !== null;
+  } catch (error) {
+    console.error('Error en isSuperAdmin:', error);
+    return false;
+  }
+}
+
+// Obtener rol del usuario admin
+async function getAdminRole(userEmail = null) {
+  try {
+    // Si no se proporciona email, obtener el del usuario actual
+    if (!userEmail) {
+      const user = await getCurrentUser();
+      if (!user) return 'user';
+      userEmail = user.email;
+    }
+
+    // Consultar la tabla admin_users
+    const { data, error } = await supabaseClient
+      .from('admin_users')
+      .select('role')
+      .eq('email', userEmail)
+      .eq('is_active', true)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Error obteniendo rol admin:', error);
+      return 'user';
+    }
+
+    return data?.role || 'user';
+  } catch (error) {
+    console.error('Error en getAdminRole:', error);
+    return 'user';
+  }
+}
+
+// Obtener todos los administradores (solo para superadmins)
+async function getAllAdmins() {
+  try {
+    const { data, error } = await supabaseClient
+      .from('admin_users')
+      .select(`
+        *,
+        created_by_user:created_by(email)
+      `)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  } catch (error) {
+    console.error('Error obteniendo administradores:', error);
+    throw error;
+  }
+}
+
+// Agregar nuevo administrador (solo para superadmins)
+async function addAdmin(email, role = 'admin') {
+  try {
+    const currentUser = await getCurrentUser();
+    if (!currentUser) throw new Error('Usuario no autenticado');
+
+    // Verificar que el usuario actual sea superadmin
+    const isSuper = await isSuperAdmin();
+    if (!isSuper) throw new Error('No tienes permisos para agregar administradores');
+
+    // Buscar el usuario por email
+    const { data: users, error: userError } = await supabaseClient
+      .from('auth.users')
+      .select('id, email')
+      .eq('email', email)
+      .limit(1);
+
+    if (userError) throw userError;
+    if (!users || users.length === 0) {
+      throw new Error('Usuario no encontrado. El usuario debe registrarse primero en la aplicación.');
+    }
+
+    const targetUser = users[0];
+
+    // Insertar en admin_users
+    const { data, error } = await supabaseClient
+      .from('admin_users')
+      .insert({
+        user_id: targetUser.id,
+        email: email,
+        role: role,
+        created_by: currentUser.id,
+        is_active: true
+      })
+      .select();
+
+    if (error) throw error;
+    return data[0];
+  } catch (error) {
+    console.error('Error agregando administrador:', error);
+    throw error;
+  }
+}
+
+// Actualizar estado de administrador (solo para superadmins)
+async function updateAdminStatus(adminId, isActive) {
+  try {
+    const isSuper = await isSuperAdmin();
+    if (!isSuper) throw new Error('No tienes permisos para actualizar administradores');
+
+    const { data, error } = await supabaseClient
+      .from('admin_users')
+      .update({ is_active: isActive })
+      .eq('id', adminId)
+      .select();
+
+    if (error) throw error;
+    return data[0];
+  } catch (error) {
+    console.error('Error actualizando estado del administrador:', error);
+    throw error;
+  }
+}
+
+// Actualizar rol de administrador (solo para superadmins)
+async function updateAdminRole(adminId, newRole) {
+  try {
+    const isSuper = await isSuperAdmin();
+    if (!isSuper) throw new Error('No tienes permisos para actualizar roles');
+
+    const { data, error } = await supabaseClient
+      .from('admin_users')
+      .update({ role: newRole })
+      .eq('id', adminId)
+      .select();
+
+    if (error) throw error;
+    return data[0];
+  } catch (error) {
+    console.error('Error actualizando rol del administrador:', error);
+    throw error;
+  }
 }
 
 // Obtener todos los recursos para el admin

@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Administradores - EvaluaT</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2.39.3/dist/umd/supabase.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .glass-effect {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .admin-card {
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .admin-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.15);
+        }
+
+        .role-badge {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.375rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.025em;
+        }
+
+        .role-superadmin {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a6f);
+            color: white;
+        }
+
+        .role-admin {
+            background: linear-gradient(135deg, #4ecdc4, #44b3a8);
+            color: white;
+        }
+
+        .status-active {
+            color: #10b981;
+        }
+
+        .status-inactive {
+            color: #ef4444;
+        }
+    </style>
+</head>
+<body class="gradient-bg min-h-screen">
+    <!-- Navbar -->
+    <nav class="glass-effect shadow-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <a href="admin.html" class="flex items-center text-white hover:text-gray-200 transition-colors">
+                        <i class="fas fa-arrow-left mr-2"></i>
+                        <span class="text-xl font-bold">← Dashboard Admin</span>
+                    </a>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <span id="adminInfo" class="text-white text-sm"></span>
+                    <div class="relative">
+                        <button id="userMenuButton" class="flex items-center text-white hover:text-gray-200 focus:outline-none z-50">
+                            <i class="fas fa-user-circle text-2xl"></i>
+                        </button>
+                        <div id="userMenu" class="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 hidden">
+                            <button onclick="logout()" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 w-full text-left">
+                                <i class="fas fa-sign-out-alt mr-2"></i>Cerrar Sesión
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Header -->
+        <div class="mb-8">
+            <h1 class="text-3xl font-bold text-white mb-2">
+                <i class="fas fa-user-shield mr-3"></i>Gestión de Administradores
+            </h1>
+            <p class="text-white text-opacity-80">
+                Administra los usuarios con permisos de administrador en el sistema
+            </p>
+        </div>
+
+        <!-- Add Admin Form -->
+        <div class="glass-effect rounded-lg p-6 mb-8">
+            <h2 class="text-xl font-semibold text-white mb-4">
+                <i class="fas fa-user-plus mr-2"></i>Agregar Nuevo Administrador
+            </h2>
+            <form id="addAdminForm" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label for="adminEmail" class="block text-white text-sm font-medium mb-2">Email del Usuario</label>
+                    <input 
+                        type="email" 
+                        id="adminEmail" 
+                        required 
+                        class="w-full px-3 py-2 bg-white bg-opacity-10 border border-white border-opacity-30 rounded-md text-white placeholder-white placeholder-opacity-60 focus:outline-none focus:ring-2 focus:ring-white focus:border-transparent"
+                        placeholder="usuario@ejemplo.com"
+                    >
+                </div>
+                <div>
+                    <label for="adminRole" class="block text-white text-sm font-medium mb-2">Rol</label>
+                    <select 
+                        id="adminRole" 
+                        class="w-full px-3 py-2 bg-white bg-opacity-10 border border-white border-opacity-30 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-white focus:border-transparent"
+                    >
+                        <option value="admin" class="text-gray-800">Administrador</option>
+                        <option value="superadmin" class="text-gray-800">Super Administrador</option>
+                    </select>
+                </div>
+                <div class="flex items-end">
+                    <button 
+                        type="submit" 
+                        class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md transition-colors duration-200 flex items-center justify-center"
+                    >
+                        <i class="fas fa-plus mr-2"></i>Agregar
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Admin List -->
+        <div class="glass-effect rounded-lg p-6">
+            <h2 class="text-xl font-semibold text-white mb-6">
+                <i class="fas fa-users-cog mr-2"></i>Administradores Actuales
+            </h2>
+            
+            <!-- Loading State -->
+            <div id="loadingAdmins" class="text-center py-8">
+                <i class="fas fa-spinner fa-spin text-white text-2xl mb-2"></i>
+                <p class="text-white text-opacity-80">Cargando administradores...</p>
+            </div>
+
+            <!-- Admin Grid -->
+            <div id="adminGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 hidden">
+                <!-- Admin cards will be inserted here -->
+            </div>
+
+            <!-- Empty State -->
+            <div id="emptyState" class="text-center py-8 hidden">
+                <i class="fas fa-user-slash text-white text-opacity-60 text-4xl mb-4"></i>
+                <p class="text-white text-opacity-80">No hay administradores registrados</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div id="confirmModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 hidden z-50">
+        <div class="bg-white rounded-lg p-6 max-w-md w-full">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4" id="modalTitle">Confirmar Acción</h3>
+            <p class="text-gray-600 mb-6" id="modalMessage">¿Estás seguro de que deseas realizar esta acción?</p>
+            <div class="flex justify-end space-x-3">
+                <button 
+                    id="cancelButton" 
+                    class="px-4 py-2 text-gray-500 hover:text-gray-700 font-medium"
+                >
+                    Cancelar
+                </button>
+                <button 
+                    id="confirmButton" 
+                    class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded-md"
+                >
+                    Confirmar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Success/Error Messages -->
+    <div id="messageContainer" class="fixed top-4 right-4 z-50"></div>
+
+    <script src="supabase.js"></script>
+    <script>
+        let currentUserRole = 'user';
+        let admins = [];
+
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', async function() {
+            try {
+                // Check authentication
+                const user = await getCurrentUser();
+                if (!user) {
+                    window.location.href = 'login.html';
+                    return;
+                }
+
+                // Check if user is superadmin
+                const isSuperAdminUser = await isSuperAdmin();
+                if (!isSuperAdminUser) {
+                    showMessage('No tienes permisos para acceder a esta página', 'error');
+                    setTimeout(() => {
+                        window.location.href = 'admin.html';
+                    }, 2000);
+                    return;
+                }
+
+                currentUserRole = await getAdminRole();
+                document.getElementById('adminInfo').textContent = `${user.email} (${currentUserRole})`;
+
+                // Load admins
+                await loadAdmins();
+
+                // Setup event listeners
+                setupEventListeners();
+            } catch (error) {
+                console.error('Error initializing page:', error);
+                showMessage('Error al cargar la página', 'error');
+            }
+        });
+
+        // Setup event listeners
+        function setupEventListeners() {
+            // User menu toggle
+            document.getElementById('userMenuButton').addEventListener('click', function() {
+                const menu = document.getElementById('userMenu');
+                menu.classList.toggle('hidden');
+            });
+
+            // Close menu when clicking outside
+            document.addEventListener('click', function(event) {
+                const userMenuButton = document.getElementById('userMenuButton');
+                const userMenu = document.getElementById('userMenu');
+                if (!userMenuButton.contains(event.target) && !userMenu.contains(event.target)) {
+                    userMenu.classList.add('hidden');
+                }
+            });
+
+            // Add admin form
+            document.getElementById('addAdminForm').addEventListener('submit', handleAddAdmin);
+
+            // Modal buttons
+            document.getElementById('cancelButton').addEventListener('click', hideModal);
+            document.getElementById('confirmButton').addEventListener('click', handleModalConfirm);
+        }
+
+        // Load admins
+        async function loadAdmins() {
+            try {
+                document.getElementById('loadingAdmins').classList.remove('hidden');
+                document.getElementById('adminGrid').classList.add('hidden');
+                document.getElementById('emptyState').classList.add('hidden');
+
+                admins = await getAllAdmins();
+                
+                if (admins.length === 0) {
+                    document.getElementById('emptyState').classList.remove('hidden');
+                } else {
+                    renderAdmins();
+                    document.getElementById('adminGrid').classList.remove('hidden');
+                }
+            } catch (error) {
+                console.error('Error loading admins:', error);
+                showMessage('Error al cargar administradores', 'error');
+                document.getElementById('emptyState').classList.remove('hidden');
+            } finally {
+                document.getElementById('loadingAdmins').classList.add('hidden');
+            }
+        }
+
+        // Render admins
+        function renderAdmins() {
+            const grid = document.getElementById('adminGrid');
+            grid.innerHTML = '';
+
+            admins.forEach(admin => {
+                const card = createAdminCard(admin);
+                grid.appendChild(card);
+            });
+        }
+
+        // Create admin card
+        function createAdminCard(admin) {
+            const div = document.createElement('div');
+            div.className = 'admin-card bg-white bg-opacity-10 backdrop-filter backdrop-blur-lg rounded-lg p-6 border border-white border-opacity-20';
+            
+            const roleClass = admin.role === 'superadmin' ? 'role-superadmin' : 'role-admin';
+            const statusClass = admin.is_active ? 'status-active' : 'status-inactive';
+            const statusIcon = admin.is_active ? 'fa-check-circle' : 'fa-times-circle';
+
+            div.innerHTML = `
+                <div class="flex items-start justify-between mb-4">
+                    <div class="flex-1">
+                        <h3 class="text-white font-semibold text-lg mb-1">${admin.email}</h3>
+                        <span class="role-badge ${roleClass}">${admin.role}</span>
+                    </div>
+                    <div class="flex items-center">
+                        <i class="fas ${statusIcon} ${statusClass} text-lg"></i>
+                    </div>
+                </div>
+                
+                <div class="text-white text-opacity-80 text-sm mb-4">
+                    <p><i class="fas fa-calendar mr-2"></i>Creado: ${new Date(admin.created_at).toLocaleDateString()}</p>
+                    ${admin.created_by_user ? `<p><i class="fas fa-user mr-2"></i>Por: ${admin.created_by_user.email}</p>` : ''}
+                </div>
+
+                <div class="flex space-x-2">
+                    ${admin.is_active ? `
+                        <button 
+                            onclick="toggleAdminStatus('${admin.id}', false, '${admin.email}')"
+                            class="flex-1 bg-yellow-600 hover:bg-yellow-700 text-white text-xs py-2 px-3 rounded-md transition-colors duration-200"
+                        >
+                            <i class="fas fa-pause mr-1"></i>Desactivar
+                        </button>
+                    ` : `
+                        <button 
+                            onclick="toggleAdminStatus('${admin.id}', true, '${admin.email}')"
+                            class="flex-1 bg-green-600 hover:bg-green-700 text-white text-xs py-2 px-3 rounded-md transition-colors duration-200"
+                        >
+                            <i class="fas fa-play mr-1"></i>Activar
+                        </button>
+                    `}
+                    
+                    ${admin.role === 'admin' ? `
+                        <button 
+                            onclick="changeRole('${admin.id}', 'superadmin', '${admin.email}')"
+                            class="flex-1 bg-purple-600 hover:bg-purple-700 text-white text-xs py-2 px-3 rounded-md transition-colors duration-200"
+                        >
+                            <i class="fas fa-arrow-up mr-1"></i>Promover
+                        </button>
+                    ` : `
+                        <button 
+                            onclick="changeRole('${admin.id}', 'admin', '${admin.email}')"
+                            class="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-xs py-2 px-3 rounded-md transition-colors duration-200"
+                        >
+                            <i class="fas fa-arrow-down mr-1"></i>Degradar
+                        </button>
+                    `}
+                </div>
+            `;
+
+            return div;
+        }
+
+        // Handle add admin form submission
+        async function handleAddAdmin(event) {
+            event.preventDefault();
+            
+            const email = document.getElementById('adminEmail').value.trim();
+            const role = document.getElementById('adminRole').value;
+
+            if (!email) {
+                showMessage('Por favor ingresa un email válido', 'error');
+                return;
+            }
+
+            try {
+                await addAdmin(email, role);
+                showMessage('Administrador agregado exitosamente', 'success');
+                document.getElementById('addAdminForm').reset();
+                await loadAdmins();
+            } catch (error) {
+                console.error('Error adding admin:', error);
+                showMessage(error.message || 'Error al agregar administrador', 'error');
+            }
+        }
+
+        // Toggle admin status
+        function toggleAdminStatus(adminId, newStatus, email) {
+            const action = newStatus ? 'activar' : 'desactivar';
+            showModal(
+                `${action.charAt(0).toUpperCase() + action.slice(1)} Administrador`,
+                `¿Estás seguro de que deseas ${action} a ${email}?`,
+                async () => {
+                    try {
+                        await updateAdminStatus(adminId, newStatus);
+                        showMessage(`Administrador ${action === 'activar' ? 'activado' : 'desactivado'} exitosamente`, 'success');
+                        await loadAdmins();
+                    } catch (error) {
+                        console.error('Error updating admin status:', error);
+                        showMessage('Error al actualizar el estado del administrador', 'error');
+                    }
+                }
+            );
+        }
+
+        // Change admin role
+        function changeRole(adminId, newRole, email) {
+            const action = newRole === 'superadmin' ? 'promover a Super Administrador' : 'degradar a Administrador';
+            showModal(
+                'Cambiar Rol',
+                `¿Estás seguro de que deseas ${action} a ${email}?`,
+                async () => {
+                    try {
+                        await updateAdminRole(adminId, newRole);
+                        showMessage('Rol actualizado exitosamente', 'success');
+                        await loadAdmins();
+                    } catch (error) {
+                        console.error('Error updating admin role:', error);
+                        showMessage('Error al actualizar el rol del administrador', 'error');
+                    }
+                }
+            );
+        }
+
+        // Modal functions
+        let modalConfirmCallback = null;
+
+        function showModal(title, message, confirmCallback) {
+            document.getElementById('modalTitle').textContent = title;
+            document.getElementById('modalMessage').textContent = message;
+            modalConfirmCallback = confirmCallback;
+            document.getElementById('confirmModal').classList.remove('hidden');
+        }
+
+        function hideModal() {
+            document.getElementById('confirmModal').classList.add('hidden');
+            modalConfirmCallback = null;
+        }
+
+        function handleModalConfirm() {
+            if (modalConfirmCallback) {
+                modalConfirmCallback();
+            }
+            hideModal();
+        }
+
+        // Show message function
+        function showMessage(message, type = 'info') {
+            const container = document.getElementById('messageContainer');
+            const messageDiv = document.createElement('div');
+            
+            const bgColor = type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500';
+            
+            messageDiv.className = `${bgColor} text-white px-4 py-3 rounded-md shadow-lg mb-2 max-w-sm`;
+            messageDiv.innerHTML = `
+                <div class="flex items-center justify-between">
+                    <span>${message}</span>
+                    <button onclick="this.parentElement.parentElement.remove()" class="ml-2 text-white hover:text-gray-200">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            `;
+            
+            container.appendChild(messageDiv);
+            
+            // Auto remove after 5 seconds
+            setTimeout(() => {
+                if (messageDiv.parentElement) {
+                    messageDiv.remove();
+                }
+            }, 5000);
+        }
+    </script>
+</body>
+</html>

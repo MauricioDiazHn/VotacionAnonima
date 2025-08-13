@@ -152,6 +152,9 @@
                 <div id="admin-stats" class="flex items-center gap-4 text-sm">
                     <!-- Se llenará dinámicamente -->
                 </div>
+                <a href="admin-users.html" id="manageAdminsLink" class="bg-white/10 hover:bg-white/20 transition-colors text-white px-4 py-2 rounded-lg hidden" title="Gestionar Administradores">
+                    <i class="fas fa-user-shield mr-2"></i>Admins
+                </a>
                 <a href="index.html" class="bg-white/10 hover:bg-white/20 transition-colors text-white px-4 py-2 rounded-lg">
                     ← Volver al sitio
                 </a>
@@ -344,6 +347,12 @@
                     alert('Acceso denegado. Solo para administradores.');
                     window.location.href = 'index.html';
                     return false;
+                }
+
+                // Verificar si es superadmin para mostrar la gestión de administradores
+                const superAdminCheck = await isSuperAdmin(currentUser.email);
+                if (superAdminCheck) {
+                    document.getElementById('manageAdminsLink').classList.remove('hidden');
                 }
 
                 return true;
