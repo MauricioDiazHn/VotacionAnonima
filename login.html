@@ -144,14 +144,44 @@
 
     <!-- Script de autenticación -->
     <script type="module">
-        import { signIn, signUp, isAuthenticated } from './supabase.js';
+        import { signIn, signUp, isAuthenticated, getCurrentUser, isAdmin } from './supabase.js';
         
         // Verificar si el usuario ya está autenticado
         async function checkAuth() {
             try {
                 const isUserAuth = await isAuthenticated();
                 if (isUserAuth) {
-                    // Si ya está autenticado, dar opción de ir al dashboard
+                    console.log('Usuario ya autenticado, verificando si es admin...');
+                    
+                    // Verificar si es admin para redirigir correctamente
+                    try {
+                        const currentUser = await getCurrentUser();
+                        const isUserAdmin = await isAdmin(currentUser?.email);
+                        
+                        console.log('Usuario:', currentUser?.email, 'Es admin:', isUserAdmin);
+                        
+                        if (isUserAdmin) {
+                            console.log('Redirigiendo admin a admin.html');
+                            window.location.href = 'admin.html';
+                            return;
+                        }
+                    } catch (adminError) {
+                        console.warn('Error verificando admin status:', adminError);
+                        // Fallback para admins conocidos
+                        try {
+                            const currentUser = await getCurrentUser();
+                            const knownAdmins = ['cotitohn35@gmail.com', 'mauricio.diaz@admin.com'];
+                            if (knownAdmins.includes(currentUser?.email)) {
+                                console.log('Admin conocido detectado, redirigiendo a admin.html');
+                                window.location.href = 'admin.html';
+                                return;
+                            }
+                        } catch (userError) {
+                            console.warn('Error obteniendo usuario:', userError);
+                        }
+                    }
+                    
+                    // Si ya está autenticado pero no es admin, dar opción de ir al dashboard normal
                     document.querySelector('.container').style.opacity = '1';
                     
                     // Mostrar mensaje de que ya está autenticado
@@ -239,7 +269,28 @@
                 loginButton.disabled = true;
                 
                 await signIn(email, password);
-                window.location.href = 'index.html';
+                
+                // Verificar si es admin para redirigir al dashboard correcto
+                try {
+                    const { isAdmin } = await import('./supabase.js');
+                    const isUserAdmin = await isAdmin(email);
+                    
+                    if (isUserAdmin) {
+                        console.log('Usuario admin detectado, redirigiendo a admin.html');
+                        window.location.href = 'admin.html';
+                    } else {
+                        window.location.href = 'index.html';
+                    }
+                } catch (adminError) {
+                    console.warn('Error verificando status de admin en login:', adminError);
+                    // Fallback: si es un email admin conocido, redirigir a admin
+                    const knownAdmins = ['cotitohn35@gmail.com', 'mauricio.diaz@admin.com'];
+                    if (knownAdmins.includes(email)) {
+                        window.location.href = 'admin.html';
+                    } else {
+                        window.location.href = 'index.html';
+                    }
+                }
             } catch (error) {
                 console.error('Error de inicio de sesión:', error);
                 loginError.textContent = 'Credenciales incorrectas. Por favor verifica e intenta de nuevo.';

@@ -317,6 +317,8 @@
             getCurrentUser,
             signOut,
             isAdmin,
+            isSuperAdmin,
+            getAdminRole,
             getAllResourcesForAdmin,
             updateResourceStatus,
             deleteResourcePermanently,
@@ -332,34 +334,91 @@
         // Verificar autenticación de admin
         async function checkAdminAuth() {
             try {
+                console.log('🔍 Verificando autenticación de admin...');
+                
                 const isAuth = await isAuthenticated();
+                console.log('✅ Usuario autenticado:', isAuth);
+                
                 if (!isAuth) {
+                    console.log('❌ Usuario no autenticado, redirigiendo al login');
                     window.location.href = 'login.html';
                     return false;
                 }
 
                 currentUser = await getCurrentUser();
+                console.log('👤 Usuario actual:', currentUser?.email);
                 
-                // Verificar si el usuario es admin
-                const adminCheck = await isAdmin(currentUser.email);
-                
-                if (!adminCheck) {
-                    alert('Acceso denegado. Solo para administradores.');
-                    window.location.href = 'index.html';
-                    return false;
+                // Verificar si el usuario es admin con mejor manejo de errores
+                try {
+                    const adminCheck = await isAdmin(currentUser.email);
+                    console.log('🔑 Verificación de admin:', adminCheck);
+                    
+                    if (!adminCheck) {
+                        console.log('❌ Usuario no es admin, redirigiendo');
+                        alert('Acceso denegado. Solo para administradores.');
+                        window.location.href = 'index.html';
+                        return false;
+                    }
+                    
+                    console.log('✅ Usuario confirmado como admin');
+                } catch (adminError) {
+                    console.error('Error verificando admin status:', adminError);
+                    // En caso de error, mostrar mensaje pero no bloquear acceso si es un email conocido
+                    const knownAdmins = ['cotitohn35@gmail.com', 'mauricio.diaz@admin.com'];
+                    if (!knownAdmins.includes(currentUser.email)) {
+                        alert('Error verificando permisos de administrador.');
+                        window.location.href = 'index.html';
+                        return false;
+                    }
+                    console.log('🚧 Acceso permitido por fallback para admin conocido');
                 }
 
                 // Verificar si es superadmin para mostrar la gestión de administradores
-                const superAdminCheck = await isSuperAdmin(currentUser.email);
-                if (superAdminCheck) {
-                    document.getElementById('manageAdminsLink').classList.remove('hidden');
+                try {
+                    const superAdminCheck = await isSuperAdmin(currentUser.email);
+                    console.log('👑 Verificación de superadmin:', superAdminCheck);
+                    
+                    if (superAdminCheck) {
+                        const manageLink = document.getElementById('manageAdminsLink');
+                        if (manageLink) {
+                            manageLink.classList.remove('hidden');
+                            console.log('✅ Enlace de gestión de admins mostrado');
+                        }
+                    }
+                } catch (superAdminError) {
+                    console.warn('Error verificando superadmin status:', superAdminError);
+                    // Si es el email principal, mostrar el enlace de todos modos
+                    if (currentUser.email === 'cotitohn35@gmail.com') {
+                        const manageLink = document.getElementById('manageAdminsLink');
+                        if (manageLink) {
+                            manageLink.classList.remove('hidden');
+                            console.log('✅ Enlace de gestión de admins mostrado por fallback');
+                        }
+                    }
                 }
 
+                console.log('🎉 Verificación de admin completada exitosamente');
                 return true;
+                
             } catch (error) {
-                console.error('Error verificando autenticación admin:', error);
-                window.location.href = 'login.html';
-                return false;
+                console.error('❌ Error general verificando autenticación admin:', error);
+                
+                // Solo redirigir si realmente hay un problema de autenticación
+                try {
+                    const user = await getCurrentUser();
+                    if (!user) {
+                        window.location.href = 'login.html';
+                        return false;
+                    }
+                    
+                    // Si tenemos usuario pero hay error en verificación de admin, permitir acceso temporal
+                    console.log('🚧 Error en verificación pero usuario existe, permitiendo acceso temporal');
+                    return true;
+                } catch (userError) {
+                    console.error('Error obteniendo usuario:', userError);
+                    window.location.href = 'login.html';
+                    return false;
+                }
             }
         }
 

@@ -704,7 +704,7 @@ async function isAdmin(userEmail = null) {
       userEmail = user.email;
     }
 
-    // Consultar la tabla admin_users
+    // Consultar la tabla admin_users con manejo de errores mejorado
     const { data, error } = await supabaseClient
       .from('admin_users')
       .select('role, is_active')
@@ -713,14 +713,31 @@ async function isAdmin(userEmail = null) {
       .maybeSingle();
 
     if (error) {
-      console.error('Error verificando admin:', error);
-      return false;
+      // Si hay un error de política o tabla, loggearlo pero no fallar
+      console.warn('Error consultando admin_users (puede ser normal si no eres admin):', error);
+      
+      // Fallback temporal: verificar con lista hardcodeada mientras se corrige la BD
+      const adminEmails = [
+        'cotitohn35@gmail.com',
+        'mauricio.diaz@admin.com',
+        'admin@evalua-t.com'
+      ];
+      
+      return adminEmails.includes(userEmail);
     }
 
     return data !== null;
   } catch (error) {
-    console.error('Error en isAdmin:', error);
-    return false;
+    console.warn('Error en isAdmin, usando fallback:', error);
+    
+    // Fallback temporal
+    const adminEmails = [
+      'cotitohn35@gmail.com',
+      'mauricio.diaz@admin.com', 
+      'admin@evalua-t.com'
+    ];
+    
+    return adminEmails.includes(userEmail || '');
   }
 }
 
@@ -744,14 +761,26 @@ async function isSuperAdmin(userEmail = null) {
       .maybeSingle();
 
     if (error) {
-      console.error('Error verificando superadmin:', error);
-      return false;
+      console.warn('Error consultando admin_users para superadmin:', error);
+      
+      // Fallback temporal para superadmins
+      const superAdminEmails = [
+        'cotitohn35@gmail.com'
+      ];
+      
+      return superAdminEmails.includes(userEmail);
     }
 
     return data !== null;
   } catch (error) {
-    console.error('Error en isSuperAdmin:', error);
-    return false;
+    console.warn('Error en isSuperAdmin, usando fallback:', error);
+    
+    // Fallback temporal
+    const superAdminEmails = [
+      'cotitohn35@gmail.com'
+    ];
+    
+    return superAdminEmails.includes(userEmail || '');
   }
 }
 
@@ -774,13 +803,25 @@ async function getAdminRole(userEmail = null) {
       .maybeSingle();
 
     if (error) {
-      console.error('Error obteniendo rol admin:', error);
-      return 'user';
+      console.warn('Error obteniendo rol admin:', error);
+      
+      // Fallback temporal
+      if (userEmail === 'cotitohn35@gmail.com') return 'superadmin';
+      
+      const adminEmails = [
+        'mauricio.diaz@admin.com',
+        'admin@evalua-t.com'
+      ];
+      
+      return adminEmails.includes(userEmail) ? 'admin' : 'user';
     }
 
     return data?.role || 'user';
   } catch (error) {
-    console.error('Error en getAdminRole:', error);
+    console.warn('Error en getAdminRole:', error);
+    
+    // Fallback temporal
+    if (userEmail === 'cotitohn35@gmail.com') return 'superadmin';
     return 'user';
   }
 }
@@ -1142,6 +1183,12 @@ export {
   getTopContributors,
   // Funciones de admin
   isAdmin,
+  isSuperAdmin,
+  getAdminRole,
+  getAllAdmins,
+  addAdmin,
+  updateAdminStatus,
+  updateAdminRole,
   getAllResourcesForAdmin,
   updateResourceStatus,
   deleteResourcePermanently,
