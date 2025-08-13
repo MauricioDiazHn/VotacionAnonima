@@ -571,7 +571,7 @@ async function getProfessorResources(professorId) {
     .from('recursos')
     .select(`
       *,
-      professors(name)
+      professors!id_catedratico(name)
     `)
     .eq('id_catedratico', professorId)
     .eq('status', 'aprobado')
@@ -714,8 +714,8 @@ async function getAllResourcesForAdmin() {
       .from('recursos')
       .select(`
         *,
-        professors(id, name),
-        profiles(full_name)
+        professors!id_catedratico(id, name),
+        profiles!id_usuario_que_subio(full_name)
       `)
       .order('created_at', { ascending: false });
 
@@ -816,8 +816,8 @@ async function getPendingResources() {
       .from('recursos')
       .select(`
         *,
-        professors(id, name),
-        profiles(full_name)
+        professors!id_catedratico(id, name),
+        profiles!id_usuario_que_subio(full_name)
       `)
       .eq('status', 'pendiente')
       .order('created_at', { ascending: true }); // Los más antiguos primero
@@ -877,8 +877,8 @@ async function searchResourcesForAdmin(filters) {
       .from('recursos')
       .select(`
         *,
-        professors(id, name),
-        profiles(full_name)
+        professors!id_catedratico(id, name),
+        profiles!id_usuario_que_subio(full_name)
       `);
 
     // Aplicar filtros
