@@ -1619,6 +1619,7 @@ export {
   hasProSubscription,
   uploadResource,
   rateResource,
+  getUserStats,
   getUserStatsManual,
   
   // Funciones públicas para recursos
