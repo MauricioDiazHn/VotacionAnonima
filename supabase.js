@@ -565,34 +565,63 @@ async function syncAllProfessorRatings() {
 
 // ==== MANEJO DE RECURSOS PRO ====
 
-// Obtener recursos de un profesor específico
+// Obtener recursos de un profesor específico (PÚBLICO - accesible para todos)
 async function getProfessorResources(professorId) {
-  const { data, error } = await supabaseClient
-    .from('recursos')
-    .select(`
-      *,
-      professors!id_catedratico(name)
-    `)
-    .eq('id_catedratico', professorId)
-    .eq('status', 'aprobado')
-    .order('created_at', { ascending: false });
-  
-  if (error) throw error;
-  
-  // Calcular rating promedio basado en votos
-  const resourcesWithRatings = data.map(resource => {
-    const totalVotes = resource.votos_positivos + resource.votos_negativos;
-    if (totalVotes > 0) {
-      const positiveRatio = resource.votos_positivos / totalVotes;
-      resource.average_rating = parseFloat((positiveRatio * 5).toFixed(1));
-    } else {
-      resource.average_rating = 0;
+  try {
+    console.log('📚 Obteniendo recursos del profesor:', professorId);
+    
+    // Usar función RPC que permite acceso público a recursos aprobados
+    const { data, error } = await supabaseClient
+      .rpc('get_public_professor_resources', { 
+        professor_id_param: professorId 
+      });
+    
+    if (error) {
+      console.error('❌ Error obteniendo recursos:', error);
+      throw error;
     }
-    resource.rating_count = totalVotes;
-    return resource;
-  });
-  
-  return resourcesWithRatings;
+    
+    console.log('✅ Recursos obtenidos:', data?.length || 0);
+    return data || [];
+    
+  } catch (error) {
+    console.error('❌ Error en getProfessorResources:', error);
+    
+    // Fallback: intentar con query normal (para compatibilidad)
+    try {
+      const { data, error: fallbackError } = await supabaseClient
+        .from('recursos')
+        .select(`
+          *,
+          professors!id_catedratico(name)
+        `)
+        .eq('id_catedratico', professorId)
+        .eq('status', 'aprobado')
+        .order('created_at', { ascending: false });
+      
+      if (fallbackError) throw fallbackError;
+      
+      // Calcular rating promedio basado en votos
+      const resourcesWithRatings = data.map(resource => {
+        const totalVotes = resource.votos_positivos + resource.votos_negativos;
+        if (totalVotes > 0) {
+          const positiveRatio = resource.votos_positivos / totalVotes;
+          resource.average_rating = parseFloat((positiveRatio * 5).toFixed(1));
+        } else {
+          resource.average_rating = 0;
+        }
+        resource.rating_count = totalVotes;
+        resource.professor_name = resource.professors?.name || 'Profesor';
+        return resource;
+      });
+      
+      return resourcesWithRatings;
+      
+    } catch (fallbackError) {
+      console.error('❌ Fallback también falló:', fallbackError);
+      return [];
+    }
+  }
 }
 
 // Verificar si el usuario tiene suscripción PRO
@@ -716,21 +745,119 @@ async function getUserStats() {
   const user = await getCurrentUser();
   if (!user) return { points: 0, uploaded_resources: 0, approved_resources: 0 };
 
-  const { data, error } = await supabaseClient
-    .from('recursos')
-    .select('status')
-    .eq('id_usuario_que_subio', user.id);
+  try {
+    console.log('📊 Obteniendo estadísticas del usuario:', user.id);
     
-  if (error) {
-    console.error('Error obteniendo estadísticas:', error);
+    // Usar función RPC para obtener puntos calculados correctamente
+    const { data, error } = await supabaseClient
+      .rpc('get_user_points', { 
+        user_id_param: user.id 
+      });
+
+    if (error) {
+      console.error('❌ Error obteniendo estadísticas:', error);
+      // Fallback: calcular manualmente
+      return await getUserStatsManual();
+    }
+
+    const stats = data && data.length > 0 ? data[0] : { points: 0, uploaded_resources: 0, approved_resources: 0 };
+    console.log('✅ Estadísticas obtenidas:', stats);
+    
+    return {
+      points: stats.points || 0,
+      uploaded_resources: stats.uploaded_resources || 0,
+      approved_resources: stats.approved_resources || 0
+    };
+
+  } catch (error) {
+    console.error('❌ Error en getUserStats:', error);
+    return await getUserStatsManual();
+  }
+}
+
+// Función manual de fallback para estadísticas
+async function getUserStatsManual() {
+  const user = await getCurrentUser();
+  if (!user) return { points: 0, uploaded_resources: 0, approved_resources: 0 };
+
+  try {
+    const { data, error } = await supabaseClient
+      .from('recursos')
+      .select('status')
+      .eq('id_usuario_que_subio', user.id);
+
+    if (error) {
+      console.error('❌ Error en fallback manual:', error);
+      return { points: 0, uploaded_resources: 0, approved_resources: 0 };
+    }
+
+    const uploaded_resources = data.length;
+    const approved_resources = data.filter(r => r.status === 'aprobado').length;
+    const points = approved_resources * 100; // 100 puntos por recurso aprobado
+
+    console.log('📊 Estadísticas calculadas manualmente:', { points, uploaded_resources, approved_resources });
+    return { points, uploaded_resources, approved_resources };
+    
+  } catch (error) {
+    console.error('❌ Error en fallback manual:', error);
     return { points: 0, uploaded_resources: 0, approved_resources: 0 };
   }
-  
-  const uploaded_resources = data.length;
-  const approved_resources = data.filter(r => r.status === 'aprobado').length;
-  const points = approved_resources * 100; // 100 puntos por recurso aprobado
-  
-  return { points, uploaded_resources, approved_resources };
+}
+
+// Obtener todos los recursos públicos aprobados (para explorar)
+async function getAllPublicResources() {
+  try {
+    console.log('🌍 Obteniendo todos los recursos públicos...');
+    
+    // Usar función RPC que permite acceso público
+    const { data, error } = await supabaseClient
+      .rpc('get_all_public_resources');
+    
+    if (error) {
+      console.error('❌ Error obteniendo recursos públicos:', error);
+      throw error;
+    }
+    
+    console.log('✅ Recursos públicos obtenidos:', data?.length || 0);
+    return data || [];
+    
+  } catch (error) {
+    console.error('❌ Error en getAllPublicResources:', error);
+    
+    // Fallback: intentar con query normal
+    try {
+      const { data, error: fallbackError } = await supabaseClient
+        .from('recursos')
+        .select(`
+          *,
+          professors!id_catedratico(name)
+        `)
+        .eq('status', 'aprobado')
+        .order('created_at', { ascending: false });
+      
+      if (fallbackError) throw fallbackError;
+      
+      // Procesar datos con ratings
+      const resourcesWithRatings = data.map(resource => {
+        const totalVotes = resource.votos_positivos + resource.votos_negativos;
+        if (totalVotes > 0) {
+          const positiveRatio = resource.votos_positivos / totalVotes;
+          resource.average_rating = parseFloat((positiveRatio * 5).toFixed(1));
+        } else {
+          resource.average_rating = 0;
+        }
+        resource.rating_count = totalVotes;
+        resource.professor_name = resource.professors?.name || 'Profesor';
+        return resource;
+      });
+      
+      return resourcesWithRatings;
+      
+    } catch (fallbackError) {
+      console.error('❌ Fallback también falló:', fallbackError);
+      return [];
+    }
+  }
 }
 
 // Obtener top contribuidores del mes
@@ -1492,7 +1619,10 @@ export {
   hasProSubscription,
   uploadResource,
   rateResource,
-  getUserStats,
+  getUserStatsManual,
+  
+  // Funciones públicas para recursos
+  getAllPublicResources,
   getTopContributors,
   // Funciones de admin
   isAdmin,
