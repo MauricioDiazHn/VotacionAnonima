@@ -619,25 +619,75 @@ async function uploadResource(professorId, file, resourceType, academicPeriod) {
   const user = await getCurrentUser();
   if (!user) throw new Error('Usuario no autenticado');
 
-  // Simular subida de archivo (en producción usarías Supabase Storage)
-  const fileName = `${Date.now()}_${file.name}`;
-  const pathStorage = `recursos-pro/${fileName}`; // Path para el bucket
-  
-  const { data, error } = await supabaseClient
-    .from('recursos')
-    .insert({
-      id_catedratico: professorId,
-      id_usuario_que_subio: user.id,
-      nombre_archivo: file.name,
-      path_storage: pathStorage,
-      tipo_recurso: resourceType,
-      periodo_academico: academicPeriod,
-      status: 'pendiente' // Requiere aprobación
-    })
-    .select();
+  try {
+    console.log('📁 Iniciando subida de archivo:', file.name);
     
-  if (error) throw error;
-  return data[0];
+    // Generar nombre único para el archivo
+    const timestamp = Date.now();
+    const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_'); // Limpiar caracteres especiales
+    const fileName = `${timestamp}_${sanitizedFileName}`;
+    const filePath = fileName; // No agregar 'recursos-pro/' aquí, Supabase lo maneja automáticamente
+    
+    console.log('📝 Nombre del archivo generado:', fileName);
+    console.log('📂 Ruta del archivo:', filePath);
+    
+    // Subir archivo a Supabase Storage
+    console.log('☁️ Subiendo archivo a Supabase Storage...');
+    const { data: uploadData, error: uploadError } = await supabaseClient.storage
+      .from('recursos-pro')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: false // No sobrescribir si ya existe
+      });
+
+    if (uploadError) {
+      console.error('❌ Error subiendo archivo:', uploadError);
+      throw new Error(`Error subiendo archivo: ${uploadError.message}`);
+    }
+
+    console.log('✅ Archivo subido exitosamente:', uploadData);
+    
+    // El path completo que se guarda en la base de datos
+    const pathStorage = `recursos-pro/${fileName}`;
+    
+    // Guardar información del recurso en la base de datos
+    console.log('💾 Guardando información en la base de datos...');
+    const { data, error } = await supabaseClient
+      .from('recursos')
+      .insert({
+        id_catedratico: professorId,
+        id_usuario_que_subio: user.id,
+        nombre_archivo: file.name, // Nombre original del archivo
+        path_storage: pathStorage, // Ruta completa en storage
+        tipo_recurso: resourceType,
+        periodo_academico: academicPeriod,
+        status: 'pendiente' // Requiere aprobación
+      })
+      .select();
+      
+    if (error) {
+      console.error('❌ Error guardando en base de datos:', error);
+      
+      // Si falla la base de datos, intentar eliminar el archivo subido
+      try {
+        await supabaseClient.storage
+          .from('recursos-pro')
+          .remove([fileName]);
+        console.log('🗑️ Archivo eliminado del storage por error en BD');
+      } catch (cleanupError) {
+        console.warn('⚠️ No se pudo limpiar el archivo del storage:', cleanupError);
+      }
+      
+      throw error;
+    }
+    
+    console.log('🎉 Recurso creado exitosamente:', data[0]);
+    return data[0];
+    
+  } catch (error) {
+    console.error('💥 Error en uploadResource:', error);
+    throw error;
+  }
 }
 
 // Calificar un recurso con voto positivo/negativo (solo usuarios PRO)
@@ -1110,7 +1160,7 @@ async function deleteResourcePermanently(resourceId) {
     // Primero obtenemos la información del archivo para eliminarlo del storage
     const { data: recurso, error: fetchError } = await supabaseClient
       .from('recursos')
-      .select('path_storage')
+      .select('path_storage, nombre_archivo')
       .eq('id', resourceId)
       .single();
 
@@ -1124,16 +1174,22 @@ async function deleteResourcePermanently(resourceId) {
     // Eliminar archivo del storage si existe
     if (recurso.path_storage) {
       console.log('deleteResourcePermanently: Eliminando archivo del storage:', recurso.path_storage);
+      
+      // Extraer solo el nombre del archivo (sin el prefijo recursos-pro/)
       const fileName = recurso.path_storage.replace('recursos-pro/', '');
+      
       const { error: storageError } = await supabaseClient.storage
         .from('recursos-pro')
         .remove([fileName]);
       
       if (storageError) {
-        console.warn('deleteResourcePermanently: Error eliminando archivo del storage (continuando):', storageError);
+        console.warn('deleteResourcePermanently: Error eliminando archivo del storage:', storageError);
+        // Continuar con la eliminación del registro aunque falle el storage
       } else {
         console.log('deleteResourcePermanently: Archivo eliminado del storage exitosamente');
       }
+    } else {
+      console.log('deleteResourcePermanently: No hay path_storage, solo eliminando registro de BD');
     }
 
     // Eliminar registro de la base de datos
