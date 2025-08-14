@@ -1026,6 +1026,8 @@ async function getAllResourcesForAdmin() {
 // Actualizar estado de un recurso (solo admin)
 async function updateResourceStatus(resourceId, newStatus) {
   try {
+    console.log('updateResourceStatus: Actualizando recurso', resourceId, 'a estado:', newStatus);
+    
     const { data, error } = await supabaseClient
       .from('recursos')
       .update({ 
@@ -1035,7 +1037,19 @@ async function updateResourceStatus(resourceId, newStatus) {
       .eq('id', resourceId)
       .select();
 
-    if (error) throw error;
+    console.log('updateResourceStatus: Respuesta de Supabase:', { data, error });
+
+    if (error) {
+      console.error('updateResourceStatus: Error de Supabase:', error);
+      throw error;
+    }
+
+    if (!data || data.length === 0) {
+      console.warn('updateResourceStatus: No se encontró el recurso con ID:', resourceId);
+      throw new Error(`No se encontró el recurso con ID: ${resourceId}`);
+    }
+
+    console.log('updateResourceStatus: Recurso actualizado exitosamente:', data[0]);
     return data[0];
   } catch (error) {
     console.error('Error actualizando estado del recurso:', error);
@@ -1046,6 +1060,8 @@ async function updateResourceStatus(resourceId, newStatus) {
 // Eliminar recurso permanentemente (solo admin)
 async function deleteResourcePermanently(resourceId) {
   try {
+    console.log('deleteResourcePermanently: Eliminando recurso con ID:', resourceId);
+    
     // Primero obtenemos la información del archivo para eliminarlo del storage
     const { data: recurso, error: fetchError } = await supabaseClient
       .from('recursos')
@@ -1053,23 +1069,41 @@ async function deleteResourcePermanently(resourceId) {
       .eq('id', resourceId)
       .single();
 
-    if (fetchError) throw fetchError;
+    console.log('deleteResourcePermanently: Datos del recurso obtenidos:', { recurso, fetchError });
+
+    if (fetchError) {
+      console.error('deleteResourcePermanently: Error obteniendo datos del recurso:', fetchError);
+      throw fetchError;
+    }
 
     // Eliminar archivo del storage si existe
     if (recurso.path_storage) {
+      console.log('deleteResourcePermanently: Eliminando archivo del storage:', recurso.path_storage);
       const fileName = recurso.path_storage.replace('recursos-pro/', '');
-      await supabaseClient.storage
+      const { error: storageError } = await supabaseClient.storage
         .from('recursos-pro')
         .remove([fileName]);
+      
+      if (storageError) {
+        console.warn('deleteResourcePermanently: Error eliminando archivo del storage (continuando):', storageError);
+      } else {
+        console.log('deleteResourcePermanently: Archivo eliminado del storage exitosamente');
+      }
     }
 
     // Eliminar registro de la base de datos
+    console.log('deleteResourcePermanently: Eliminando registro de la base de datos...');
     const { error } = await supabaseClient
       .from('recursos')
       .delete()
       .eq('id', resourceId);
 
-    if (error) throw error;
+    if (error) {
+      console.error('deleteResourcePermanently: Error eliminando registro de BD:', error);
+      throw error;
+    }
+
+    console.log('deleteResourcePermanently: Recurso eliminado exitosamente');
     return true;
   } catch (error) {
     console.error('Error eliminando recurso:', error);

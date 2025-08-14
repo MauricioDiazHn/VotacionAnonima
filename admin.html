@@ -104,6 +104,25 @@
             border: 1px solid rgba(239, 68, 68, 0.4);
         }
 
+        /* Estados en inglés */
+        .status-pending {
+            background: rgba(251, 191, 36, 0.2);
+            color: #fbbf24;
+            border: 1px solid rgba(251, 191, 36, 0.4);
+        }
+
+        .status-approved {
+            background: rgba(34, 197, 94, 0.2);
+            color: #22c55e;
+            border: 1px solid rgba(34, 197, 94, 0.4);
+        }
+
+        .status-rejected {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.4);
+        }
+
         .file-preview {
             width: 48px;
             height: 48px;
@@ -448,9 +467,17 @@
                 document.getElementById('stat-usuarios').textContent = stats.usuariosActivos;
             } catch (error) {
                 console.error('Error actualizando estadísticas:', error);
-                // Fallback local
-                const pendientes = allRecursos.filter(r => r.status === 'pendiente').length;
-                const aprobados = allRecursos.filter(r => r.status === 'aprobado').length;
+                // Fallback local con normalización de estados
+                const pendientes = allRecursos.filter(r => {
+                    const status = normalizeStatus(r.status);
+                    return status === 'pending';
+                }).length;
+                
+                const aprobados = allRecursos.filter(r => {
+                    const status = normalizeStatus(r.status);
+                    return status === 'approved';
+                }).length;
+                
                 const total = allRecursos.length;
                 const usuariosUnicos = new Set(allRecursos.map(r => r.id_usuario_que_subio)).size;
 
@@ -482,6 +509,8 @@
                 const fileExt = recurso.nombre_archivo.split('.').pop().toLowerCase();
                 const fileTypeClass = getFileTypeClass(fileExt);
                 const fileTypeIcon = getFileTypeIcon(fileExt);
+                const normalizedStatus = normalizeStatus(recurso.status);
+                const statusDisplayText = getStatusDisplayText(recurso.status);
                 
                 return `
                     <div class="admin-card p-6" data-id="${recurso.id}">
@@ -506,7 +535,7 @@
 
                             <!-- Status y acciones -->
                             <div class="flex flex-col sm:flex-row sm:items-center gap-4">
-                                <span class="status-badge status-${recurso.status}">${recurso.status}</span>
+                                <span class="status-badge status-${normalizedStatus}">${statusDisplayText}</span>
                                 
                                 <div class="flex items-center gap-2">
                                     <div class="flex items-center gap-1 text-sm">
@@ -524,7 +553,7 @@
                                 </div>
 
                                 <div class="flex flex-wrap gap-2">
-                                    ${recurso.status === 'pendiente' ? `
+                                    ${(normalizedStatus === 'pending' || recurso.status === 'pendiente') ? `
                                         <button onclick="approveResource(${recurso.id})" class="bg-emerald-600 hover:bg-emerald-700 transition-colors text-white px-3 py-1 rounded text-sm flex items-center gap-1">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                 <polyline points="20,6 9,17 4,12"></polyline>
@@ -563,6 +592,30 @@
         }
 
         // Funciones de utilidad
+        function normalizeStatus(status) {
+            const statusMap = {
+                'pendiente': 'pending',
+                'aprobado': 'approved', 
+                'rechazado': 'rejected',
+                'pending': 'pending',
+                'approved': 'approved',
+                'rejected': 'rejected'
+            };
+            return statusMap[status] || status;
+        }
+
+        function getStatusDisplayText(status) {
+            const textMap = {
+                'pending': 'Pendiente',
+                'approved': 'Aprobado',
+                'rejected': 'Rechazado',
+                'pendiente': 'Pendiente',
+                'aprobado': 'Aprobado',
+                'rechazado': 'Rechazado'
+            };
+            return textMap[status] || status;
+        }
+
         function getFileTypeClass(ext) {
             if (ext === 'pdf') return 'file-type-pdf';
             if (['doc', 'docx'].includes(ext)) return 'file-type-doc';
@@ -615,7 +668,8 @@
                 'bg-emerald-600 hover:bg-emerald-700',
                 () => {
                     console.log('Callback de aprobar ejecutándose para ID:', id);
-                    updateResourceStatusLocal(id, 'aprobado');
+                    // Probar con estado en inglés
+                    updateResourceStatusLocal(id, 'approved');
                 }
             );
         };
@@ -630,7 +684,8 @@
                 'bg-rose-600 hover:bg-rose-700',
                 () => {
                     console.log('Callback de rechazar ejecutándose para ID:', id);
-                    updateResourceStatusLocal(id, 'rechazado');
+                    // Probar con estado en inglés
+                    updateResourceStatusLocal(id, 'rejected');
                 }
             );
         };
@@ -770,7 +825,11 @@
             const searchTerm = document.getElementById('search-input').value.toLowerCase();
             
             filteredRecursos = allRecursos.filter(recurso => {
-                const matchesStatus = currentFilter === 'all' || recurso.status === currentFilter;
+                // Normalizar estado para comparación
+                const normalizedStatus = normalizeStatus(recurso.status);
+                const normalizedFilter = normalizeStatus(currentFilter);
+                
+                const matchesStatus = currentFilter === 'all' || normalizedStatus === normalizedFilter;
                 const matchesSearch = recurso.nombre_archivo.toLowerCase().includes(searchTerm) ||
                                     recurso.tipo_recurso.toLowerCase().includes(searchTerm) ||
                                     (recurso.professors?.name || '').toLowerCase().includes(searchTerm);
