@@ -12,6 +12,8 @@
             background: rgba(255, 255, 255, 0.1);
             backdrop-filter: blur(10px);
             border: 1px solid rgba(255, 255, 255, 0.2);
+            position: relative;
+            z-index: 1;
         }
         
         .gradient-bg {
@@ -65,10 +67,13 @@
 
         #userDropdown {
             max-height: 240px;
-            z-index: 99999;
+            z-index: 999999 !important;
             box-shadow: 0 25px 50px rgba(0,0,0,0.4), 0 0 0 1px rgba(0,0,0,0.1);
             border: 2px solid rgba(255,255,255,0.9);
             position: fixed !important;
+            isolation: isolate;
+            transform: translateZ(0);
+            will-change: transform;
         }
 
         #userDropdown::-webkit-scrollbar {
@@ -87,6 +92,18 @@
 
         #userDropdown::-webkit-scrollbar-thumb:hover {
             background: #555;
+        }
+
+        /* Force dropdown to be on top of everything */
+        body #userDropdown {
+            z-index: 999999 !important;
+            position: fixed !important;
+        }
+
+        /* Ensure no element can override our dropdown */
+        .glass-effect {
+            position: relative !important;
+            z-index: auto !important;
         }
     </style>
 </head>
@@ -172,7 +189,7 @@
                     </div>
                     
                     <!-- Dropdown de sugerencias -->
-                    <div id="userDropdown" class="fixed z-50 bg-white rounded-md shadow-lg border border-gray-200 hidden max-h-60 overflow-y-auto" style="background-color: rgba(255,255,255,0.98); backdrop-filter: blur(10px); min-width: 300px;">
+                    <div id="userDropdown" class="fixed bg-white rounded-md shadow-lg border border-gray-200 hidden max-h-60 overflow-y-auto" style="background-color: rgba(255,255,255,0.98); backdrop-filter: blur(10px); min-width: 300px; z-index: 999999; position: fixed !important;">
                         <div id="loadingUsers" class="p-3 text-center text-gray-500">
                             <i class="fas fa-spinner fa-spin mr-2"></i>Cargando sugerencias...
                         </div>
@@ -567,6 +584,12 @@
             dropdown.style.left = inputRect.left + 'px';
             dropdown.style.top = (inputRect.bottom + 4) + 'px';
             dropdown.style.width = dropdownWidth + 'px';
+            
+            // Force maximum z-index
+            dropdown.style.zIndex = '999999';
+            dropdown.style.position = 'fixed';
+            dropdown.style.isolation = 'isolate';
+            dropdown.style.transform = 'translateZ(0)';
             
             dropdown.classList.remove('hidden');
         }
