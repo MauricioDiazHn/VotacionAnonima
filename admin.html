@@ -606,35 +606,47 @@
 
         // Funciones de moderación
         window.approveResource = (id) => {
+            console.log('approveResource llamada con ID:', id);
             showConfirmationModal(
                 'Aprobar Recurso',
                 '¿Estás seguro de que quieres aprobar este recurso?',
                 'El recurso será visible para todos los usuarios.',
                 'Aprobar',
                 'bg-emerald-600 hover:bg-emerald-700',
-                () => updateResourceStatusLocal(id, 'aprobado')
+                () => {
+                    console.log('Callback de aprobar ejecutándose para ID:', id);
+                    updateResourceStatusLocal(id, 'aprobado');
+                }
             );
         };
 
         window.rejectResource = (id) => {
+            console.log('rejectResource llamada con ID:', id);
             showConfirmationModal(
                 'Rechazar Recurso',
                 '¿Estás seguro de que quieres rechazar este recurso?',
                 'El recurso será marcado como rechazado y no será visible.',
                 'Rechazar',
                 'bg-rose-600 hover:bg-rose-700',
-                () => updateResourceStatusLocal(id, 'rechazado')
+                () => {
+                    console.log('Callback de rechazar ejecutándose para ID:', id);
+                    updateResourceStatusLocal(id, 'rechazado');
+                }
             );
         };
 
         window.deleteResource = (id) => {
+            console.log('deleteResource llamada con ID:', id);
             showConfirmationModal(
                 'Eliminar Recurso',
                 '¿Estás seguro de que quieres eliminar este recurso?',
                 'Esta acción no se puede deshacer.',
                 'Eliminar',
                 'bg-red-600 hover:bg-red-700',
-                () => deleteResourcePermanentlyLocal(id)
+                () => {
+                    console.log('Callback de eliminar ejecutándose para ID:', id);
+                    deleteResourcePermanentlyLocal(id);
+                }
             );
         };
 
@@ -648,9 +660,13 @@
 
         // Actualizar status de recurso
         async function updateResourceStatusLocal(id, newStatus) {
+            console.log('updateResourceStatusLocal llamada con ID:', id, 'Status:', newStatus);
             try {
-                await updateResourceStatus(id, newStatus);
+                console.log('Llamando a updateResourceStatus...');
+                const result = await updateResourceStatus(id, newStatus);
+                console.log('Resultado de updateResourceStatus:', result);
                 showToast(`Recurso ${newStatus} exitosamente`, 'success');
+                console.log('Recargando recursos...');
                 await loadAllRecursos(); // Recargar datos
 
             } catch (error) {
@@ -661,9 +677,13 @@
 
         // Eliminar recurso permanentemente
         async function deleteResourcePermanentlyLocal(id) {
+            console.log('deleteResourcePermanentlyLocal llamada con ID:', id);
             try {
-                await deleteResourcePermanently(id);
+                console.log('Llamando a deleteResourcePermanently...');
+                const result = await deleteResourcePermanently(id);
+                console.log('Resultado de deleteResourcePermanently:', result);
                 showToast('Recurso eliminado exitosamente', 'success');
+                console.log('Recargando recursos...');
                 await loadAllRecursos(); // Recargar datos
 
             } catch (error) {
@@ -701,11 +721,16 @@
 
             modal.classList.remove('hidden');
 
+            // Limpiar event listeners previos
+            const newModalConfirm = modalConfirm.cloneNode(true);
+            modalConfirm.parentNode.replaceChild(newModalConfirm, modalConfirm);
+
             // Event listeners del modal
-            modalConfirm.onclick = () => {
+            newModalConfirm.addEventListener('click', () => {
                 modal.classList.add('hidden');
+                console.log('Modal confirmado - ejecutando callback');
                 onConfirm();
-            };
+            });
         }
 
         // Event listeners
