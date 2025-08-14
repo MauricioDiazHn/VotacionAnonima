@@ -1052,7 +1052,7 @@ async function updateResourceStatus(resourceId, newStatus) {
 
     console.log('updateResourceStatus: Recurso encontrado:', existingResource);
 
-    // Ahora proceder con la actualización
+    // Intentar actualización normal primero
     const { data, error } = await supabaseClient
       .from('recursos')
       .update({ 
@@ -1070,8 +1070,28 @@ async function updateResourceStatus(resourceId, newStatus) {
     }
 
     if (!data || data.length === 0) {
-      console.warn('updateResourceStatus: Actualización no devolvió datos');
-      throw new Error(`No se pudo actualizar el recurso con ID: ${resourceId}`);
+      console.warn('updateResourceStatus: Actualización no devolvió datos - posible problema de RLS');
+      
+      // Intentar con función RPC como alternativa
+      try {
+        console.log('updateResourceStatus: Intentando con función RPC...');
+        const { data: rpcData, error: rpcError } = await supabaseClient.rpc('update_resource_status_admin', {
+          resource_id: resourceId,
+          new_status: newStatus,
+          admin_email: (await getCurrentUser()).email
+        });
+
+        if (rpcError) {
+          console.error('updateResourceStatus: Error en RPC:', rpcError);
+          throw new Error(`Problema de permisos: No se pudo actualizar el recurso. Contacta al administrador del sistema.`);
+        }
+
+        console.log('updateResourceStatus: Actualización exitosa con RPC');
+        return { id: resourceId, status: newStatus };
+      } catch (rpcError) {
+        console.error('updateResourceStatus: RPC fallback falló:', rpcError);
+        throw new Error(`Problema de permisos: No se pudo actualizar el recurso con ID: ${resourceId}. Verifica las políticas RLS en Supabase.`);
+      }
     }
 
     console.log('updateResourceStatus: Recurso actualizado exitosamente:', data[0]);
@@ -1438,3 +1458,21 @@ export {
   // Cliente de Supabase para diagnósticos
   supabaseClient
 };
+
+// Función para obtener URL de archivos
+async function getResourceFileUrl(pathStorage) {
+  try {
+    const { data, error } = await supabaseClient.storage
+      .from('recursos-pro')
+      .createSignedUrl(pathStorage.replace('recursos-pro/', ''), 300); // 5 minutos
+    
+    if (error) throw error;
+    return data.signedUrl;
+  } catch (error) {
+    console.error('Error obteniendo URL del archivo:', error);
+    throw error;
+  }
+}
+
+// Exportar la función adicional
+export { getResourceFileUrl };

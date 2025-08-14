@@ -330,6 +330,61 @@
         </div>
     </div>
 
+    <!-- Modal de Vista Previa -->
+    <div id="preview-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white/10 backdrop-blur-lg rounded-2xl ring-1 ring-white/20 shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+            <!-- Header del modal -->
+            <div class="flex items-center justify-between p-6 border-b border-white/20">
+                <div>
+                    <h3 id="preview-title" class="text-lg font-semibold text-white">Vista Previa del Archivo</h3>
+                    <p id="preview-filename" class="text-sm text-white/60"></p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <button id="preview-download" class="bg-blue-600 hover:bg-blue-700 transition-colors text-white px-4 py-2 rounded-lg flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7,10 12,15 17,10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                        Descargar
+                    </button>
+                    <button id="preview-close" class="bg-white/10 hover:bg-white/20 transition-colors text-white p-2 rounded-lg">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Contenido del modal -->
+            <div class="flex-1 overflow-hidden">
+                <div id="preview-loading" class="flex items-center justify-center h-full">
+                    <div class="text-center">
+                        <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-white mx-auto mb-4"></div>
+                        <p class="text-white/60">Cargando vista previa...</p>
+                    </div>
+                </div>
+                
+                <div id="preview-content" class="h-full hidden">
+                    <!-- Se llenará dinámicamente -->
+                </div>
+                
+                <div id="preview-error" class="flex items-center justify-center h-full hidden">
+                    <div class="text-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" class="mx-auto mb-4 text-white/40">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="8" x2="12" y2="12"></line>
+                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                        </svg>
+                        <p class="text-white/60 mb-4">No se pudo cargar la vista previa</p>
+                        <p class="text-white/40 text-sm">Usa el botón de descarga para revisar el archivo</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script type="module">
         import { 
             isAuthenticated, 
@@ -344,6 +399,8 @@
             getAdminStats,
             supabaseClient
         } from './supabase.js';
+
+        import { getResourceFileUrl } from './supabase.js';
 
         // Variables globales
         let currentUser = null;
@@ -558,6 +615,21 @@
 
                                 <div class="flex flex-wrap gap-2">
                                     ${(normalizedStatus === 'pending' || recurso.status === 'pendiente') ? `
+                                        <button onclick="previewResource(${recurso.id})" class="bg-blue-600 hover:bg-blue-700 transition-colors text-white px-3 py-1 rounded text-sm flex items-center gap-1" title="Vista previa del archivo">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                                                <circle cx="12" cy="12" r="3"></circle>
+                                            </svg>
+                                            Vista Previa
+                                        </button>
+                                        <button onclick="downloadResource(${recurso.id})" class="bg-gray-600 hover:bg-gray-700 transition-colors text-white px-3 py-1 rounded text-sm flex items-center gap-1" title="Descargar archivo">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                                <polyline points="7,10 12,15 17,10"></polyline>
+                                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                                            </svg>
+                                            Descargar
+                                        </button>
                                         <button onclick="approveResource(${recurso.id})" class="bg-emerald-600 hover:bg-emerald-700 transition-colors text-white px-3 py-1 rounded text-sm flex items-center gap-1">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                 <polyline points="20,6 9,17 4,12"></polyline>
@@ -572,12 +644,20 @@
                                             Rechazar
                                         </button>
                                     ` : `
-                                        <button onclick="viewResource(${recurso.id})" class="bg-blue-600 hover:bg-blue-700 transition-colors text-white px-3 py-1 rounded text-sm flex items-center gap-1">
+                                        <button onclick="previewResource(${recurso.id})" class="bg-blue-600 hover:bg-blue-700 transition-colors text-white px-3 py-1 rounded text-sm flex items-center gap-1" title="Vista previa del archivo">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                 <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
                                                 <circle cx="12" cy="12" r="3"></circle>
                                             </svg>
-                                            Ver
+                                            Vista Previa
+                                        </button>
+                                        <button onclick="downloadResource(${recurso.id})" class="bg-gray-600 hover:bg-gray-700 transition-colors text-white px-3 py-1 rounded text-sm flex items-center gap-1" title="Descargar archivo">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                                <polyline points="7,10 12,15 17,10"></polyline>
+                                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                                            </svg>
+                                            Descargar
                                         </button>
                                     `}
                                     <button onclick="deleteResource(${recurso.id})" class="bg-gray-600 hover:bg-gray-700 transition-colors text-white px-3 py-1 rounded text-sm flex items-center gap-1">
@@ -749,12 +829,62 @@
             );
         };
 
-        window.viewResource = (id) => {
+        // Previsualizar recurso
+        window.previewResource = async (id) => {
+            console.log('previewResource llamada con ID:', id);
             const recurso = allRecursos.find(r => r.id === id);
-            if (recurso) {
-                // Aquí podrías abrir un modal con más detalles o descargar el archivo
-                showToast(`Viendo recurso: ${recurso.nombre_archivo}`, 'info');
+            if (!recurso) {
+                showToast('Recurso no encontrado', 'error');
+                return;
             }
+
+            showPreviewModal(recurso);
+        };
+
+        // Descargar recurso
+        window.downloadResource = async (id) => {
+            console.log('downloadResource llamada con ID:', id);
+            const recurso = allRecursos.find(r => r.id === id);
+            if (!recurso) {
+                showToast('Recurso no encontrado', 'error');
+                return;
+            }
+
+            try {
+                if (recurso.path_storage) {
+                    // Obtener URL de descarga desde Supabase Storage
+                    const { data, error } = await supabaseClient.storage
+                        .from('recursos-pro')
+                        .createSignedUrl(recurso.path_storage.replace('recursos-pro/', ''), 60); // URL válida por 60 segundos
+
+                    if (error) {
+                        console.error('Error generando URL de descarga:', error);
+                        showToast('Error al generar enlace de descarga', 'error');
+                        return;
+                    }
+
+                    // Crear enlace de descarga
+                    const link = document.createElement('a');
+                    link.href = data.signedUrl;
+                    link.download = recurso.nombre_archivo;
+                    link.target = '_blank';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+
+                    showToast('Descarga iniciada', 'success');
+                } else {
+                    showToast('Archivo no disponible para descarga', 'error');
+                }
+            } catch (error) {
+                console.error('Error descargando archivo:', error);
+                showToast('Error al descargar el archivo', 'error');
+            }
+        };
+
+        window.viewResource = (id) => {
+            // Redirigir a previsualización para recursos ya procesados
+            previewResource(id);
         };
 
         // Actualizar status de recurso
@@ -832,7 +962,123 @@
             });
         }
 
-        // Event listeners
+        // Modal de vista previa
+        function showPreviewModal(recurso) {
+            const modal = document.getElementById('preview-modal');
+            const title = document.getElementById('preview-title');
+            const filename = document.getElementById('preview-filename');
+            const loading = document.getElementById('preview-loading');
+            const content = document.getElementById('preview-content');
+            const error = document.getElementById('preview-error');
+            const downloadBtn = document.getElementById('preview-download');
+
+            // Mostrar información del archivo
+            title.textContent = 'Vista Previa del Archivo';
+            filename.textContent = recurso.nombre_archivo;
+
+            // Configurar botón de descarga
+            downloadBtn.onclick = () => downloadResource(recurso.id);
+
+            // Mostrar modal
+            modal.classList.remove('hidden');
+
+            // Resetear estados
+            loading.classList.remove('hidden');
+            content.classList.add('hidden');
+            error.classList.add('hidden');
+
+            // Generar vista previa según el tipo de archivo
+            generatePreview(recurso, content, loading, error);
+        }
+
+        async function generatePreview(recurso, contentDiv, loadingDiv, errorDiv) {
+            try {
+                const fileExt = recurso.nombre_archivo.split('.').pop().toLowerCase();
+                
+                if (recurso.path_storage) {
+                    // Obtener URL del archivo desde Supabase Storage
+                    const { data, error } = await supabaseClient.storage
+                        .from('recursos-pro')
+                        .createSignedUrl(recurso.path_storage.replace('recursos-pro/', ''), 300); // 5 minutos
+
+                    if (error) {
+                        throw new Error('No se pudo acceder al archivo');
+                    }
+
+                    const fileUrl = data.signedUrl;
+
+                    // Generar vista previa según el tipo de archivo
+                    let previewHTML = '';
+
+                    if (fileExt === 'pdf') {
+                        previewHTML = `
+                            <iframe src="${fileUrl}" 
+                                    class="w-full h-full border-0" 
+                                    style="min-height: 600px;">
+                            </iframe>
+                        `;
+                    } else if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(fileExt)) {
+                        previewHTML = `
+                            <div class="flex items-center justify-center h-full p-4">
+                                <img src="${fileUrl}" 
+                                     alt="${recurso.nombre_archivo}"
+                                     class="max-w-full max-h-full object-contain rounded-lg shadow-lg">
+                            </div>
+                        `;
+                    } else if (['txt', 'md', 'json', 'csv'].includes(fileExt)) {
+                        // Para archivos de texto, intentar cargar el contenido
+                        try {
+                            const response = await fetch(fileUrl);
+                            const text = await response.text();
+                            previewHTML = `
+                                <div class="h-full overflow-auto p-6">
+                                    <pre class="text-white/80 whitespace-pre-wrap text-sm font-mono bg-black/20 p-4 rounded-lg">${text.substring(0, 10000)}${text.length > 10000 ? '\n\n... (archivo truncado, descarga para ver completo)' : ''}</pre>
+                                </div>
+                            `;
+                        } catch (textError) {
+                            throw new Error('No se pudo cargar el contenido del archivo');
+                        }
+                    } else if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(fileExt)) {
+                        // Para documentos de Office, mostrar visor de Google Docs
+                        previewHTML = `
+                            <iframe src="https://docs.google.com/gview?url=${encodeURIComponent(fileUrl)}&embedded=true" 
+                                    class="w-full h-full border-0" 
+                                    style="min-height: 600px;">
+                            </iframe>
+                        `;
+                    } else {
+                        // Tipo de archivo no soportado
+                        throw new Error('Tipo de archivo no soportado para vista previa');
+                    }
+
+                    contentDiv.innerHTML = previewHTML;
+                    loadingDiv.classList.add('hidden');
+                    contentDiv.classList.remove('hidden');
+
+                } else {
+                    throw new Error('Archivo no disponible');
+                }
+
+            } catch (error) {
+                console.error('Error generando vista previa:', error);
+                loadingDiv.classList.add('hidden');
+                errorDiv.classList.remove('hidden');
+            }
+        }
+
+        // Event listeners del modal de vista previa
+        document.getElementById('preview-close').addEventListener('click', () => {
+            document.getElementById('preview-modal').classList.add('hidden');
+        });
+
+        // Cerrar modal al hacer clic fuera
+        document.getElementById('preview-modal').addEventListener('click', (e) => {
+            if (e.target.id === 'preview-modal') {
+                document.getElementById('preview-modal').classList.add('hidden');
+            }
+        });
+
+        // Event listeners del modal de confirmación
         document.getElementById('modal-cancel').addEventListener('click', () => {
             document.getElementById('confirmation-modal').classList.add('hidden');
         });
