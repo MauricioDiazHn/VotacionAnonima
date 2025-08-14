@@ -1028,6 +1028,31 @@ async function updateResourceStatus(resourceId, newStatus) {
   try {
     console.log('updateResourceStatus: Actualizando recurso', resourceId, 'a estado:', newStatus);
     
+    // Primero verificar si el recurso existe
+    const { data: existingResource, error: checkError } = await supabaseClient
+      .from('recursos')
+      .select('id, status, nombre_archivo')
+      .eq('id', resourceId)
+      .single();
+
+    console.log('updateResourceStatus: Verificación de existencia:', { existingResource, checkError });
+
+    if (checkError) {
+      console.error('updateResourceStatus: Error verificando recurso:', checkError);
+      if (checkError.code === 'PGRST116') {
+        throw new Error(`No se encontró el recurso con ID: ${resourceId}`);
+      }
+      throw checkError;
+    }
+
+    if (!existingResource) {
+      console.error('updateResourceStatus: Recurso no encontrado');
+      throw new Error(`No se encontró el recurso con ID: ${resourceId}`);
+    }
+
+    console.log('updateResourceStatus: Recurso encontrado:', existingResource);
+
+    // Ahora proceder con la actualización
     const { data, error } = await supabaseClient
       .from('recursos')
       .update({ 
@@ -1037,16 +1062,16 @@ async function updateResourceStatus(resourceId, newStatus) {
       .eq('id', resourceId)
       .select();
 
-    console.log('updateResourceStatus: Respuesta de Supabase:', { data, error });
+    console.log('updateResourceStatus: Respuesta de actualización:', { data, error });
 
     if (error) {
-      console.error('updateResourceStatus: Error de Supabase:', error);
+      console.error('updateResourceStatus: Error de actualización:', error);
       throw error;
     }
 
     if (!data || data.length === 0) {
-      console.warn('updateResourceStatus: No se encontró el recurso con ID:', resourceId);
-      throw new Error(`No se encontró el recurso con ID: ${resourceId}`);
+      console.warn('updateResourceStatus: Actualización no devolvió datos');
+      throw new Error(`No se pudo actualizar el recurso con ID: ${resourceId}`);
     }
 
     console.log('updateResourceStatus: Recurso actualizado exitosamente:', data[0]);
@@ -1409,5 +1434,7 @@ export {
   getPendingResources,
   approveResourcesBatch,
   rejectResourcesBatch,
-  searchResourcesForAdmin
+  searchResourcesForAdmin,
+  // Cliente de Supabase para diagnósticos
+  supabaseClient
 };

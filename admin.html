@@ -341,7 +341,8 @@
             getAllResourcesForAdmin,
             updateResourceStatus,
             deleteResourcePermanently,
-            getAdminStats
+            getAdminStats,
+            supabaseClient
         } from './supabase.js';
 
         // Variables globales
@@ -505,6 +506,9 @@
             emptyState.classList.add('hidden');
             lista.classList.remove('hidden');
 
+            // Debug: mostrar IDs de recursos que se van a renderizar
+            console.log('🎨 Renderizando recursos con IDs:', filteredRecursos.map(r => r.id));
+
             lista.innerHTML = filteredRecursos.map(recurso => {
                 const fileExt = recurso.nombre_archivo.split('.').pop().toLowerCase();
                 const fileTypeClass = getFileTypeClass(fileExt);
@@ -656,6 +660,46 @@
                 toast.remove();
             }, 3000);
         }
+
+        // Funciones de diagnóstico (para debugging)
+        window.debugRecursos = async () => {
+            console.log('🔍 DIAGNÓSTICO DE RECURSOS:');
+            try {
+                const recursos = await getAllResourcesForAdmin();
+                console.log('📋 Total de recursos encontrados:', recursos.length);
+                console.log('📋 Lista de recursos:');
+                recursos.forEach(r => {
+                    console.log(`  - ID: ${r.id}, Status: ${r.status}, Archivo: ${r.nombre_archivo}`);
+                });
+                return recursos;
+            } catch (error) {
+                console.error('❌ Error obteniendo recursos:', error);
+            }
+        };
+
+        window.debugRecurso = async (id) => {
+            console.log(`🔍 DIAGNÓSTICO DEL RECURSO ID: ${id}`);
+            try {
+                const { data, error } = await supabaseClient
+                    .from('recursos')
+                    .select('*')
+                    .eq('id', id);
+                
+                console.log('📋 Resultado de la consulta:', { data, error });
+                
+                if (error) {
+                    console.error('❌ Error en la consulta:', error);
+                } else if (!data || data.length === 0) {
+                    console.warn('⚠️ No se encontró recurso con ese ID');
+                } else {
+                    console.log('✅ Recurso encontrado:', data[0]);
+                }
+                
+                return { data, error };
+            } catch (error) {
+                console.error('❌ Error ejecutando diagnóstico:', error);
+            }
+        };
 
         // Funciones de moderación
         window.approveResource = (id) => {
